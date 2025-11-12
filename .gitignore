@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Логи и временные файлы
+*.log
+logs/
+*.tmp
+*.temp
+
+# Lock файлы и кэши
+.auto_cycle.lock
+*.lock
+.cache/
+*.cache
+
+# Данные и конфигурация
+data/recommendations_log.csv
+data/*.json
+data/*.csv
+.env
+.env.local
+config.local.json
+
+# Telegram сообщения
+last_telegram_message.txt
+telegram_failed_messages/
+
+# HTML снимки (временные)
+*.html
+scores24_*.html
+debug_*.html
+
+# Тестовые файлы
+test_*.json
+*_test_results.json
+temp_*.json
+
+# Windows
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Автогенерируемые файлы
+disclaimer_counter.txt
+*.txt.bak
+
+# MCP конфигурация (может содержать токены)
+mcp.json
+mcp.*.json
+
+# Планировщик
+.empty_streak.txt
+
+# Временные скрипты (опционально - можно включить в репозиторий)
+# test_*.py
+# debug_*.py
+# check_*.py
+
