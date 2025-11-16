@@ -1,3 +1,25 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Local data/logs
+data/
+logs/
+*.log
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# OS junk
+.DS_Store
+Thumbs.db
 # Python
 __pycache__/
 *.py[cod]

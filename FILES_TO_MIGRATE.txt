@@ -1,0 +1,116 @@
+═══════════════════════════════════════════════════════════════
+📦 СПИСОК ФАЙЛОВ ДЛЯ ПЕРЕНОСА НА УДАЛЕННЫЙ СЕРВЕР
+═══════════════════════════════════════════════════════════════
+
+🔴 КРИТИЧЕСКИ ВАЖНЫЕ (ОБЯЗАТЕЛЬНЫ):
+───────────────────────────────────────────────────────────────
+✅ working_autoclicker.py           - ГЛАВНЫЙ: отправляет запросы каждые 45 мин
+✅ send_fixed_analysis.py           - Отправка в Telegram  
+✅ start_working_autoclicker.bat    - Запуск автокликера (Windows)
+✅ requirements.txt                 - Зависимости Python
+
+🟡 ДОКУМЕНТАЦИЯ (ВАЖНАЯ):
+───────────────────────────────────────────────────────────────
+✅ CRITICAL_RULES.md                - 🚨 ЖЕЛЕЗНОЕ ПРАВИЛО: всегда искать статистику!
+✅ AUTONOMOUS_SYSTEM_GUIDE.md       - ГЛАВНАЯ ИНСТРУКЦИЯ для полностью автономной системы
+✅ ALGORITHM_MATCH_SELECTION.MD     - Алгоритм отбора матчей
+✅ WORKING_METHOD.md                - Методология работы
+
+🟢 ДОПОЛНИТЕЛЬНАЯ ДОКУМЕНТАЦИЯ (опционально):
+───────────────────────────────────────────────────────────────
+⚪ AUTOMATION_INSTRUCTIONS.md
+⚪ CHANNEL_DEVELOPMENT_STRATEGY.md
+⚪ COMPLETE_DEVELOPMENT_ROADMAP.md
+⚪ COMPLETE_PROJECT_GUIDE.md
+⚪ FINAL_BALANCED_STRATEGY.md
+⚪ FINAL_PROJECT_DESCRIPTION.md
+⚪ FINAL_SETUP_INSTRUCTIONS.md
+⚪ MESSAGE_FORMAT_EXAMPLES.md
+⚪ MESSAGE_TEMPLATE_STANDARD.md
+⚪ MIGRATION_CHECKLIST.md
+⚪ PREMIUM_LAUNCH_CHECKLIST.md
+⚪ PREMIUM_STRATEGY_500_WEEK.md
+⚪ PROMOTION_STRATEGY.md
+⚪ QUICK_START_CHECKLIST.md
+⚪ README_SESSION_SUMMARY.md
+⚪ README_SETUP.md
+⚪ SCHEDULE_PLAN.md
+⚪ TENNIS_RULES_STRICT.md
+⚪ TIMEWEB_SETUP_GUIDE.md
+⚪ VISUAL_BRANDING_GUIDE.md
+⚪ АВТОКЛИКЕР_ИНСТРУКЦИЯ.md
+⚪ ИНСТРУКЦИЯ_АВТОЗАПУСК.md
+⚪ ИНСТРУКЦИЯ_АВТОМАТИЗАЦИЯ.md
+
+🔵 ВРЕМЕННЫЕ/ТЕСТОВЫЕ (НЕ ПЕРЕНОСИТЬ):
+───────────────────────────────────────────────────────────────
+❌ current_live_analysis_mcp.txt    - Создается автоматически ИИ
+❌ current_betboom_analysis_21_09.txt - Старый анализ
+❌ cleanup_old_files.py             - Уже использован, не нужен
+
+═══════════════════════════════════════════════════════════════
+📊 ИТОГО ДЛЯ ПЕРЕНОСА:
+═══════════════════════════════════════════════════════════════
+  
+  🔴 Критичные:       4 файла (АВТОКЛИКЕР + ОТПРАВКА)
+  🟡 Важная док:      3 файла
+  🟢 Доп. док:       24 файла (опционально)
+  ────────────────────────────────
+  📦 МИНИМУМ:         7 файлов
+  📦 РЕКОМЕНДУЕТСЯ:  31 файл
+
+═══════════════════════════════════════════════════════════════
+🚀 БЫСТРЫЙ ПЕРЕНОС (МИНИМУМ):
+═══════════════════════════════════════════════────────════════
+
+Скопируй только эти 8 файлов на сервер:
+
+1. working_autoclicker.py           ← ГЛАВНЫЙ ФАЙЛ!
+2. send_fixed_analysis.py           ← Отправка в Telegram
+3. start_working_autoclicker.bat    ← Запуск (Windows)
+4. requirements.txt                 ← Зависимости
+5. CRITICAL_RULES.md                ← 🚨 ЖЕЛЕЗНОЕ ПРАВИЛО!
+6. AUTONOMOUS_SYSTEM_GUIDE.md       ← ГЛАВНАЯ ИНСТРУКЦИЯ
+7. ALGORITHM_MATCH_SELECTION.md     ← Алгоритм отбора
+8. WORKING_METHOD.md                ← Методология
+
+Этого достаточно для ПОЛНОСТЬЮ АВТОНОМНОЙ работы!
+
+═══════════════════════════════════════════════════════════════
+📋 СТРУКТУРА НА СЕРВЕРЕ:
+═══════════════════════════════════════════════════════════════
+
+~/betboom_analyzer/
+├── working_autoclicker.py          ← ГЛАВНЫЙ: запускать автоматически!
+├── send_fixed_analysis.py          ← Запускается ИИ после анализа
+├── start_working_autoclicker.bat   ← Для Windows
+├── requirements.txt                ← pip install -r requirements.txt
+├── AUTONOMOUS_SYSTEM_GUIDE.md      ← ГЛАВНАЯ ИНСТРУКЦИЯ
+├── ALGORITHM_MATCH_SELECTION.md    ← Как выбирать матчи
+└── WORKING_METHOD.md               ← Методология
+
+После запуска появятся:
+├── current_live_analysis_mcp.txt   ← Результат ИИ (автоматически)
+└── working_autoclicker.log         ← Логи автокликера (автоматически)
+
+═══════════════════════════════════════════════════════════════
+✅ CHECKLIST ПОСЛЕ ПЕРЕНОСА:
+═══════════════════════════════════════════════════════════════
+
+□ Все 7 файлов скопированы
+□ Python 3.8+ установлен
+□ pip install -r requirements.txt выполнен (pyautogui, pyperclip, schedule, requests)
+□ Cursor открыт с этим чатом
+□ Координаты поля ввода определены (см. AUTONOMOUS_SYSTEM_GUIDE.md)
+□ Browser MCP установлен и подключен
+□ Автокликер запускается: python working_autoclicker.py
+□ Тестовый запрос отправлен и получен ИИ
+□ ИИ провел анализ через Browser MCP
+□ Отправка работает: python send_fixed_analysis.py
+□ Сообщение пришло в @TrueLiveBet
+□ Автозапуск настроен (startup/systemd)
+
+═══════════════════════════════════════════════════════════════
+🎯 СИСТЕМА ГОТОВА К РАБОТЕ!
+═══════════════════════════════════════════════════════════════
+

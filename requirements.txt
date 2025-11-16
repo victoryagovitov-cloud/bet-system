@@ -1,0 +1,21 @@
+# Зависимости для автоматического парсера BetBoom
+aiohttp>=3.8.0
+asyncio
+logging
+datetime
+json
+subprocess
+sys
+os
+
+# Selenium для Scores24
+selenium>=4.0.0
+webdriver-manager>=4.0.0
+
+# Планировщик для дневных отчетов
+schedule>=1.1.0
+
+# Модуль статистики и инфографики
+matplotlib>=3.5.0
+certifi
+requests

@@ -1,0 +1,23 @@
+{
+  "last_check": "2025-11-12T23:33:02.406415+03:00",
+  "results": {
+    "scheduler": {
+      "ok": true,
+      "message": "Планировщик работает (PID 11480)"
+    },
+    "activity": {
+      "ok": true,
+      "message": "Активность нормальная (3 мин назад)"
+    },
+    "api": {
+      "ok": true,
+      "message": "Scores24: OK | Telegram: OK"
+    },
+    "disk": {
+      "ok": true,
+      "message": "Места достаточно: 173.64 GB"
+    }
+  },
+  "critical_issues": 0,
+  "warnings": 0
+}

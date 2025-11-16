@@ -1,0 +1,21 @@
+{
+  "predictions": [
+    {
+      "id": 1,
+      "timestamp": "2025-10-28T03:00:35.921118",
+      "date": "2025-10-28",
+      "sport": "tennis",
+      "team1": "Синнер Я.",
+      "team2": "Медведев Д.",
+      "league": "ATP Shanghai",
+      "score_at_prediction": "6:4, 3:1",
+      "odds": 1.15,
+      "category": "perfect",
+      "recommendation": "П1",
+      "status": "pending",
+      "final_score": null,
+      "checked_at": null,
+      "profit": null
+    }
+  ]
+}

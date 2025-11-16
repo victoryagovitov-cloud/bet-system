@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "browser": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-browser"
+      ],
+      "launchOptions": {
+        "args": [
+          "--disable-images",
+          "--disable-css",
+          "--disable-fonts",
+          "--disable-media",
+          "--blink-settings=imagesEnabled=false"
+        ]
+      }
+    }
+  }
+}
+
