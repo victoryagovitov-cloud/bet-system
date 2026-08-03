@@ -1,95 +1,78 @@
-__pycache__/
-*.pyc
-.pytest_cache/
-.mypy_cache/
-.venv/
-venv/
-.idea/
-.vscode/
-
-# Local data/logs
-data/
-logs/
-*.log
-
-# Env files
-.env
-.env.local
-.env.*.local
-
-# OS junk
-.DS_Store
-Thumbs.db
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
 venv/
 ENV/
-.venv
+env/
+.venv/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
 
-# Логи и временные файлы
-*.log
-logs/
-*.tmp
-*.temp
-
-# Lock файлы и кэши
-.auto_cycle.lock
-*.lock
-.cache/
-*.cache
-
-# Данные и конфигурация
-data/recommendations_log.csv
-data/*.json
-data/*.csv
+# Environment variables
 .env
 .env.local
-config.local.json
+.env.*.local
 
-# Telegram сообщения
-last_telegram_message.txt
-telegram_failed_messages/
+# Database files
+data/*.db
+data/*.sqlite
+data/*.json
 
-# HTML снимки (временные)
-*.html
-scores24_*.html
-debug_*.html
+# Logs
+*.log
+logs/
 
-# Тестовые файлы
-test_*.json
-*_test_results.json
-temp_*.json
-
-# Windows
-Thumbs.db
-Desktop.ini
+# OS
 .DS_Store
+Thumbs.db
 
-# Автогенерируемые файлы
-disclaimer_counter.txt
-*.txt.bak
+# Temporary files
+*.tmp
+*.temp
+.cache/
 
-# MCP конфигурация (может содержать токены)
-mcp.json
-mcp.*.json
+# Test coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.pytest_cache/
 
-# Планировщик
-.empty_streak.txt
+# Jupyter
+.ipynb_checkpoints/
 
-# Временные скрипты (опционально - можно включить в репозиторий)
-# test_*.py
-# debug_*.py
-# check_*.py
+# Lock files for scheduler
+*.lock
 
+# AI PRIME pause flag
+ai_prime_pause.flag
+
+# Secrets (никогда не коммитить!)
+secrets/
+*.pem
+*.key
