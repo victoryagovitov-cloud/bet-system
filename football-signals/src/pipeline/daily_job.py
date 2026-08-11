@@ -14,7 +14,34 @@ from config.settings import get_settings
 from src.api_sport_client import ApiSportClient, ApiSportError
 from src.db.repository import SignalRepository
 from src.league_filter import is_league_allowed
-from src import max_publisher, probability_model, signal_formatter, stake_engine, value_engine
+from src import (
+    llm_quality,
+    max_publisher,
+    probability_model,
+    signal_formatter,
+    stake_engine,
+    value_engine,
+)
+
+
+def _news_client(settings):
+    if not (settings.llm_quality_enabled and settings.news_llm_enabled and settings.news_llm_api_key):
+        return None
+    return llm_quality.OpenAICompatibleClient(
+        api_key=settings.news_llm_api_key,
+        base_url=settings.news_llm_base_url,
+        model=settings.news_llm_model,
+    )
+
+
+def _logic_client(settings):
+    if not (settings.llm_quality_enabled and settings.logic_llm_enabled and settings.logic_llm_api_key):
+        return None
+    return llm_quality.OpenAICompatibleClient(
+        api_key=settings.logic_llm_api_key,
+        base_url=settings.logic_llm_base_url,
+        model=settings.logic_llm_model,
+    )
 
 
 def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.SignalCandidate]:
@@ -23,6 +50,8 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
     bookmakers = settings.bookmakers_whitelist
     repo = SignalRepository(settings.database_url)
     signals: list[value_engine.SignalCandidate] = []
+    news_client = _news_client(settings)
+    logic_client = _logic_client(settings)
 
     logger.info("pipeline start date={} bookmakers={}", target_date, bookmakers)
 
@@ -44,10 +73,8 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
             league_id = ((m.get("tournament") or {}).get("id"))
             if not is_league_allowed(league_id):
                 continue
-            if m.get("status") not in (None, "notstarted"):
-                # MVP: только prematch
-                if m.get("status") != "notstarted":
-                    continue
+            if m.get("status") != "notstarted":
+                continue
             allowed.append(m)
 
         logger.info("matches after league whitelist: {}", len(allowed))
@@ -75,6 +102,7 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
                 )
                 continue
 
+            # Edge <= 0 already filtered in value_engine — keep as hard rule.
             stake = stake_engine.calculate_stake_fraction(
                 signal.model_prob,
                 signal.best_odds,
@@ -83,14 +111,95 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
             )
             if stake <= 0:
                 logger.info(
-                    "skip match={} outcome={} — kelly=0 (no positive edge after stake)",
+                    "skip match={} outcome={} — kelly=0 (no positive edge)",
                     match_id,
                     signal.outcome,
                 )
                 continue
             signal.stake_fraction = stake
 
+            existing = repo.get_by_match_outcome(signal.match_id, signal.outcome)
+            if existing is not None:
+                if signal.best_odds > (existing.best_odds or 0):
+                    repo.note_odds_improvement(
+                        signal.match_id, signal.outcome, signal.best_odds, signal.best_bookmaker
+                    )
+                    logger.info(
+                        "dup skip (odds improved logged) match={} {} {:.2f}->{:.2f}",
+                        signal.match_id,
+                        signal.outcome,
+                        existing.best_odds,
+                        signal.best_odds,
+                    )
+                else:
+                    logger.info(
+                        "dup skip match={} outcome={} already status={}",
+                        signal.match_id,
+                        signal.outcome,
+                        existing.status,
+                    )
+                continue
+
+            odds_min, odds_max, odds_spread = value_engine.odds_spread_for_outcome(
+                detail.get("oddsBk") or {}, bookmakers, signal.outcome
+            )
+            anomaly = bool(
+                odds_spread is not None
+                and odds_spread >= settings.odds_spread_anomaly_threshold
+            )
+            if anomaly:
+                logger.warning(
+                    "odds spread anomaly match={} outcome={} min={} max={} spread={}",
+                    signal.match_id,
+                    signal.outcome,
+                    odds_min,
+                    odds_max,
+                    odds_spread,
+                )
+
             text = signal_formatter.format_signal(signal, settings.bankroll_amount)
+
+            news = llm_quality.check_news(
+                signal,
+                client=news_client,
+                enabled=settings.llm_quality_enabled and settings.news_llm_enabled,
+            )
+            if not news.ok:
+                repo.save_signal(
+                    signal,
+                    status="blocked_news",
+                    odds_min=odds_min,
+                    odds_max=odds_max,
+                    odds_spread=odds_spread,
+                    odds_spread_anomaly=anomaly,
+                    news_check_ok=False,
+                    news_check_summary=news.summary,
+                )
+                logger.warning("blocked by news: {} — {}", signal.match_id, news.summary)
+                continue
+
+            logic = llm_quality.check_logic(
+                signal,
+                text,
+                client=logic_client,
+                enabled=settings.llm_quality_enabled and settings.logic_llm_enabled,
+            )
+            if not logic.ok:
+                repo.save_signal(
+                    signal,
+                    status="blocked_logic",
+                    odds_min=odds_min,
+                    odds_max=odds_max,
+                    odds_spread=odds_spread,
+                    odds_spread_anomaly=anomaly,
+                    news_check_ok=news.ok,
+                    news_check_summary=news.summary,
+                    logic_check_ok=False,
+                    logic_check_summary=logic.summary,
+                )
+                logger.warning("blocked by logic: {} — {}", signal.match_id, logic.summary)
+                continue
+
             publish_ref = max_publisher.publish_signal(
                 text,
                 chat_id=settings.max_channel_chat_id,
@@ -98,10 +207,22 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
                 publish_mode=settings.publish_mode,
                 match_id=signal.match_id,
             )
-            repo.save_signal(signal, publish_ref=publish_ref)
+            repo.save_signal(
+                signal,
+                publish_ref=publish_ref,
+                status="published",
+                odds_min=odds_min,
+                odds_max=odds_max,
+                odds_spread=odds_spread,
+                odds_spread_anomaly=anomaly,
+                news_check_ok=news.ok,
+                news_check_summary=news.summary,
+                logic_check_ok=logic.ok,
+                logic_check_summary=logic.summary,
+            )
             signals.append(signal)
             logger.info(
-                "SIGNAL {} {} {} @{} ({}) edge={:.1%} stake={:.2%}",
+                "SIGNAL {} {} {} @{} ({}) edge={:.1%} stake={:.2%} anomaly={}",
                 signal.home_team,
                 signal.away_team,
                 signal.outcome_label,
@@ -109,6 +230,7 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
                 signal.best_bookmaker,
                 signal.edge,
                 signal.stake_fraction,
+                anomaly,
             )
 
     logger.info("pipeline done signals={}", len(signals))

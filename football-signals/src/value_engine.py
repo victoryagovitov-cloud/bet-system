@@ -111,6 +111,21 @@ def best_odds_across_bookmakers(
     return best_bk, best_odds
 
 
+def odds_spread_for_outcome(
+    odds_bk: dict, bookmaker_ids: list[str], outcome: str
+) -> tuple[float | None, float | None, float | None]:
+    """Return (min_odds, max_odds, spread=max-min) across active bookmakers."""
+    factors: list[float] = []
+    for bk in bookmaker_ids:
+        factor = get_outcome_odds(odds_bk, bk, outcome)
+        if factor is not None:
+            factors.append(factor)
+    if not factors:
+        return None, None, None
+    lo, hi = min(factors), max(factors)
+    return lo, hi, hi - lo
+
+
 def find_signal(
     match: dict,
     model_probs: dict[str, float],

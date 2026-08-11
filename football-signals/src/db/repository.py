@@ -12,7 +12,34 @@ class SignalRepository:
     def __init__(self, database_url: str):
         self._Session = make_session_factory(database_url)
 
-    def save_signal(self, signal: SignalCandidate, publish_ref: str | None = None) -> int:
+    def get_by_match_outcome(self, match_id: int, outcome: str) -> SignalRow | None:
+        with self._Session() as session:
+            row = session.scalars(
+                select(SignalRow).where(
+                    SignalRow.match_id == match_id,
+                    SignalRow.outcome == outcome,
+                )
+            ).first()
+            if row is None:
+                return None
+            session.expunge(row)
+            return row
+
+    def save_signal(
+        self,
+        signal: SignalCandidate,
+        *,
+        publish_ref: str | None = None,
+        status: str = "published",
+        odds_min: float | None = None,
+        odds_max: float | None = None,
+        odds_spread: float | None = None,
+        odds_spread_anomaly: bool = False,
+        news_check_ok: bool | None = None,
+        news_check_summary: str | None = None,
+        logic_check_ok: bool | None = None,
+        logic_check_summary: str | None = None,
+    ) -> int:
         row = SignalRow(
             match_id=signal.match_id,
             home_team=signal.home_team,
@@ -27,8 +54,17 @@ class SignalRepository:
             best_odds=signal.best_odds,
             edge=signal.edge,
             stake_fraction=signal.stake_fraction,
-            published_at=datetime.utcnow(),
+            status=status,
+            published_at=datetime.utcnow() if status == "published" else None,
             publish_ref=publish_ref,
+            odds_min=odds_min,
+            odds_max=odds_max,
+            odds_spread=odds_spread,
+            odds_spread_anomaly=odds_spread_anomaly,
+            news_check_ok=news_check_ok,
+            news_check_summary=news_check_summary,
+            logic_check_ok=logic_check_ok,
+            logic_check_summary=logic_check_summary,
         )
         with self._Session() as session:
             session.add(row)
@@ -36,14 +72,46 @@ class SignalRepository:
             session.refresh(row)
             return int(row.id)
 
+    def note_odds_improvement(
+        self, match_id: int, outcome: str, new_odds: float, new_bookmaker: str
+    ) -> None:
+        """Log-only for MVP: update best_odds if improved, do not re-publish."""
+        with self._Session() as session:
+            row = session.scalars(
+                select(SignalRow).where(
+                    SignalRow.match_id == match_id,
+                    SignalRow.outcome == outcome,
+                )
+            ).first()
+            if not row:
+                return
+            if new_odds > (row.best_odds or 0):
+                row.best_odds = new_odds
+                row.best_bookmaker = new_bookmaker
+                session.commit()
+
     def unsettled(self) -> list[SignalRow]:
         with self._Session() as session:
             rows = session.scalars(
-                select(SignalRow).where(SignalRow.result_win.is_(None))
+                select(SignalRow).where(
+                    SignalRow.result_win.is_(None),
+                    SignalRow.status == "published",
+                )
             ).all()
+            for row in rows:
+                session.expunge(row)
             return list(rows)
 
-    def mark_settled(self, signal_id: int, won: bool, final_score: str | None) -> None:
+    def mark_settled(
+        self,
+        signal_id: int,
+        won: bool,
+        final_score: str | None,
+        *,
+        closing_odds: float | None = None,
+        closing_bookmaker: str | None = None,
+        clv: float | None = None,
+    ) -> None:
         with self._Session() as session:
             row = session.get(SignalRow, signal_id)
             if not row:
@@ -51,4 +119,22 @@ class SignalRepository:
             row.result_win = won
             row.final_score = final_score
             row.settled_at = datetime.utcnow()
+            if closing_odds is not None:
+                row.closing_odds = closing_odds
+            if closing_bookmaker is not None:
+                row.closing_bookmaker = closing_bookmaker
+            if clv is not None:
+                row.clv = clv
             session.commit()
+
+    def settled_published(self) -> list[SignalRow]:
+        with self._Session() as session:
+            rows = session.scalars(
+                select(SignalRow).where(
+                    SignalRow.status == "published",
+                    SignalRow.result_win.is_not(None),
+                )
+            ).all()
+            for row in rows:
+                session.expunge(row)
+            return list(rows)

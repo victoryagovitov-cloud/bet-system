@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 data/*.db
+!data/signals.db
 data/signals_dry_run/
 *.log
 .DS_Store

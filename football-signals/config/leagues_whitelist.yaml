@@ -64,6 +64,16 @@ leagues:
     name_ru: "Вторая Бундеслига"
     data_quality: medium
     has_xg: true
+  - id: 53
+    name: "Serie B"
+    name_ru: "Серия Б Италия"
+    data_quality: medium
+    has_xg: true
+  - id: 390
+    name: "Brazil Serie B"
+    name_ru: "Серия Б Бразилии"
+    data_quality: medium
+    has_xg: false
 
   # Еврокубки / топ ЮА
   - id: 7

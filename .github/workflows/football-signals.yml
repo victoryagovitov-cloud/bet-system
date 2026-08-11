@@ -1,0 +1,109 @@
+name: Football signals daily
+
+on:
+  schedule:
+    # МСК = UTC+3 → 08:00 / 14:00 / 20:00 МСК
+    - cron: "0 5 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "YYYY-MM-DD (optional; default tomorrow MSK)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: football-signals
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: football-signals/requirements.txt
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Write .env from secrets
+        env:
+          API_SPORT_KEY: ${{ secrets.API_SPORT_KEY }}
+          MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
+          MAX_CHANNEL_CHAT_ID: ${{ secrets.MAX_CHANNEL_CHAT_ID }}
+          NEWS_LLM_API_KEY: ${{ secrets.NEWS_LLM_API_KEY }}
+          LOGIC_LLM_API_KEY: ${{ secrets.LOGIC_LLM_API_KEY }}
+          BANKROLL_AMOUNT: ${{ secrets.BANKROLL_AMOUNT }}
+          PUBLISH_MODE: ${{ vars.PUBLISH_MODE }}
+          LLM_QUALITY_ENABLED: ${{ vars.LLM_QUALITY_ENABLED }}
+          NEWS_LLM_ENABLED: ${{ vars.NEWS_LLM_ENABLED }}
+          LOGIC_LLM_ENABLED: ${{ vars.LOGIC_LLM_ENABLED }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          lines = {
+              "API_SPORT_BASE_URL": "https://api.api-sport.ru",
+              "API_SPORT_KEY": os.environ.get("API_SPORT_KEY", ""),
+              "API_SPORT_SPORT_SLUG": "football",
+              "BOOKMAKERS_WHITELIST": "marathon,melbet,betboom,pari",
+              "MAX_BOT_TOKEN": os.environ.get("MAX_BOT_TOKEN", ""),
+              "MAX_CHANNEL_CHAT_ID": os.environ.get("MAX_CHANNEL_CHAT_ID", ""),
+              "PUBLISH_MODE": os.environ.get("PUBLISH_MODE") or "dry_run",
+              "MIN_MODEL_PROBABILITY": "0.80",
+              "STAKE_HARD_CAP_FRACTION": "0.0333",
+              "KELLY_FRACTION_MODE": "quarter",
+              "BANKROLL_AMOUNT": os.environ.get("BANKROLL_AMOUNT") or "30000",
+              "TIMEZONE": "Europe/Moscow",
+              "DATABASE_URL": "sqlite:///data/signals.db",
+              "LLM_QUALITY_ENABLED": os.environ.get("LLM_QUALITY_ENABLED") or "false",
+              "NEWS_LLM_ENABLED": os.environ.get("NEWS_LLM_ENABLED") or "false",
+              "NEWS_LLM_API_KEY": os.environ.get("NEWS_LLM_API_KEY", ""),
+              "NEWS_LLM_BASE_URL": "https://api.perplexity.ai",
+              "NEWS_LLM_MODEL": "sonar",
+              "LOGIC_LLM_ENABLED": os.environ.get("LOGIC_LLM_ENABLED") or "false",
+              "LOGIC_LLM_API_KEY": os.environ.get("LOGIC_LLM_API_KEY", ""),
+              "LOGIC_LLM_BASE_URL": "https://api.aitunnel.ru/v1",
+              "LOGIC_LLM_MODEL": "deepseek-chat",
+              "ODDS_SPREAD_ANOMALY_THRESHOLD": "0.80",
+          }
+          Path(".env").write_text("\n".join(f"{k}={v}" for k, v in lines.items()) + "\n", encoding="utf-8")
+          print("wrote .env keys:", ", ".join(lines))
+          PY
+
+      - name: Run daily signals
+        run: |
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            python scripts/run_daily.py --date "${{ github.event.inputs.date }}"
+          else
+            python scripts/run_daily.py
+          fi
+
+      - name: Track / settle results
+        run: python scripts/track_results.py
+        continue-on-error: true
+
+      - name: Commit SQLite state back to repo
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p football-signals/data
+          git add -f football-signals/data/signals.db || true
+          if git diff --staged --quiet; then
+            echo "No DB changes to commit"
+          else
+            git commit -m "chore: update signals.db after scheduled run"
+            git push
+          fi

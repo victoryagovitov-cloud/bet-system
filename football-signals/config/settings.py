@@ -16,6 +16,12 @@ def _split_csv(value: str) -> list[str]:
     return [x.strip() for x in value.split(",") if x.strip()]
 
 
+def _bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     api_sport_base_url: str
@@ -32,6 +38,18 @@ class Settings:
     timezone: str
     database_url: str
     leagues_whitelist_path: Path
+    # Odds spread anomaly threshold (absolute odds points, e.g. 0.8)
+    odds_spread_anomaly_threshold: float
+    # LLM quality gate
+    llm_quality_enabled: bool
+    news_llm_enabled: bool
+    news_llm_api_key: str
+    news_llm_base_url: str
+    news_llm_model: str
+    logic_llm_enabled: bool
+    logic_llm_api_key: str
+    logic_llm_base_url: str
+    logic_llm_model: str
 
 
 @lru_cache(maxsize=1)
@@ -60,6 +78,20 @@ def get_settings() -> Settings:
         timezone=os.getenv("TIMEZONE", "Europe/Moscow"),
         database_url=db_url,
         leagues_whitelist_path=ROOT / "config" / "leagues_whitelist.yaml",
+        odds_spread_anomaly_threshold=float(os.getenv("ODDS_SPREAD_ANOMALY_THRESHOLD", "0.80")),
+        llm_quality_enabled=_bool(os.getenv("LLM_QUALITY_ENABLED"), False),
+        news_llm_enabled=_bool(os.getenv("NEWS_LLM_ENABLED"), False),
+        news_llm_api_key=os.getenv("NEWS_LLM_API_KEY", ""),
+        news_llm_base_url=os.getenv(
+            "NEWS_LLM_BASE_URL", "https://api.perplexity.ai"
+        ).rstrip("/"),
+        news_llm_model=os.getenv("NEWS_LLM_MODEL", "sonar"),
+        logic_llm_enabled=_bool(os.getenv("LOGIC_LLM_ENABLED"), False),
+        logic_llm_api_key=os.getenv("LOGIC_LLM_API_KEY", ""),
+        logic_llm_base_url=os.getenv(
+            "LOGIC_LLM_BASE_URL", "https://api.aitunnel.ru/v1"
+        ).rstrip("/"),
+        logic_llm_model=os.getenv("LOGIC_LLM_MODEL", "deepseek-chat"),
     )
 
 
