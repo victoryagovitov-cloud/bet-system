@@ -1,0 +1,103 @@
+# tournament.id из API-SPORT.ru (поле Match.tournament.id)
+# Расширять вручную после проверки качества статистики/pregame.
+leagues:
+  # Big-5 + РПЛ
+  - id: 17
+    name: "Premier League"
+    name_ru: "Премьер-лига (Англия)"
+    data_quality: high
+    has_xg: true
+  - id: 8
+    name: "La Liga"
+    name_ru: "Ла Лига"
+    data_quality: high
+    has_xg: true
+  - id: 23
+    name: "Serie A"
+    name_ru: "Серия А"
+    data_quality: high
+    has_xg: true
+  - id: 35
+    name: "Bundesliga"
+    name_ru: "Бундеслига"
+    data_quality: high
+    has_xg: true
+  - id: 34
+    name: "Ligue 1"
+    name_ru: "Лига 1"
+    data_quality: high
+    has_xg: true
+  - id: 203
+    name: "Russian Premier League"
+    name_ru: "Российская Премьер-Лига"
+    data_quality: medium
+    has_xg: false
+
+  # Сильные европейские лиги
+  - id: 37
+    name: "Eredivisie"
+    name_ru: "Эредивизи"
+    data_quality: high
+    has_xg: true
+  - id: 238
+    name: "Primeira Liga"
+    name_ru: "Примейра-лига Португалии"
+    data_quality: high
+    has_xg: true
+  - id: 38
+    name: "Belgian Pro League"
+    name_ru: "Про-лига"
+    data_quality: medium
+    has_xg: false
+  - id: 36
+    name: "Scottish Premiership"
+    name_ru: "Премьершип Шотландии"
+    data_quality: medium
+    has_xg: false
+  - id: 18
+    name: "Championship"
+    name_ru: "Чемпионшип"
+    data_quality: medium
+    has_xg: true
+  - id: 44
+    name: "2. Bundesliga"
+    name_ru: "Вторая Бундеслига"
+    data_quality: medium
+    has_xg: true
+
+  # Еврокубки / топ ЮА
+  - id: 7
+    name: "UEFA Champions League"
+    name_ru: "Лига чемпионов УЕФА"
+    data_quality: high
+    has_xg: true
+  - id: 679
+    name: "UEFA Europa League"
+    name_ru: "Лига Европы УЕФА"
+    data_quality: high
+    has_xg: true
+  - id: 17015
+    name: "UEFA Conference League"
+    name_ru: "Лига конференций УЕФА"
+    data_quality: medium
+    has_xg: false
+  - id: 384
+    name: "Copa Libertadores"
+    name_ru: "Кубок Либертадорес"
+    data_quality: medium
+    has_xg: false
+  - id: 480
+    name: "Copa Sudamericana"
+    name_ru: "Южноамериканский кубок"
+    data_quality: medium
+    has_xg: false
+  - id: 325
+    name: "Brazil Serie A"
+    name_ru: "Серия А Бразилии"
+    data_quality: medium
+    has_xg: false
+  - id: 155
+    name: "Argentina Liga Profesional"
+    name_ru: "Профессиональная футбольная лига Аргентины"
+    data_quality: medium
+    has_xg: false
