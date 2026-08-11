@@ -23,16 +23,21 @@ class SignalCandidate:
     lambda_away: float | None = None
 
 
-# market path inside oddsBk[bk].markets
-OUTCOME_MARKET_MAP = {
-    "w1": ("result", "w1"),
-    "x": ("result", "x"),
-    "w2": ("result", "w2"),
-    "btts_yes": ("btts", "yes"),
-    "btts_no": ("btts", "no"),
-    "dc_1x": ("double_chance", "1x"),
-    "dc_12": ("double_chance", "12"),
-    "dc_x2": ("double_chance", "x2"),
+# (market_key, stake_key, line_argument|None)
+OUTCOME_MARKET_MAP: dict[str, tuple[str, str, float | None]] = {
+    "w1": ("result", "w1", None),
+    "x": ("result", "x", None),
+    "w2": ("result", "w2", None),
+    "btts_yes": ("btts", "yes", None),
+    "btts_no": ("btts", "no", None),
+    "dc_1x": ("double_chance", "1x", None),
+    "dc_12": ("double_chance", "12", None),
+    "dc_x2": ("double_chance", "x2", None),
+    "total_over_25": ("total", "over", 2.5),
+    "total_under_25": ("total", "under", 2.5),
+    # European handicap 0 ≈ DNB (ничья — возврат)
+    "dnb_1": ("handicap", "handicap_1", 0.0),
+    "dnb_2": ("handicap", "handicap_2", 0.0),
 }
 
 OUTCOME_LABELS = {
@@ -44,6 +49,10 @@ OUTCOME_LABELS = {
     "dc_1x": "1X",
     "dc_12": "12",
     "dc_x2": "X2",
+    "total_over_25": "ТБ 2.5",
+    "total_under_25": "ТМ 2.5",
+    "dnb_1": "DNB П1",
+    "dnb_2": "DNB П2",
 }
 
 
@@ -53,24 +62,31 @@ def _team_name(team: dict | None) -> str:
     return (team.get("translations") or {}).get("ru") or team.get("name") or "?"
 
 
-def _extract_factor(stake_obj: Any) -> float | None:
+def _extract_factor(stake_obj: Any, argument: float | None = None) -> float | None:
     if stake_obj is None:
         return None
     if isinstance(stake_obj, (int, float)):
         return float(stake_obj)
-    if isinstance(stake_obj, dict):
+    if not isinstance(stake_obj, dict):
+        return None
+    if argument is None:
         if "factor" in stake_obj and stake_obj["factor"] is not None:
             try:
                 return float(stake_obj["factor"])
             except (TypeError, ValueError):
                 return None
-        # lines market (totals/handicap) — not used for 1X2 MVP paths
-        lines = stake_obj.get("lines")
-        if isinstance(lines, list) and lines:
-            try:
-                return float(lines[0].get("factor"))
-            except (TypeError, ValueError, AttributeError):
-                return None
+        return None
+
+    lines = stake_obj.get("lines")
+    if not isinstance(lines, list):
+        return None
+    target = float(argument)
+    for line in lines:
+        try:
+            if abs(float(line.get("argument")) - target) < 1e-9:
+                return float(line.get("factor"))
+        except (TypeError, ValueError, AttributeError):
+            continue
     return None
 
 
@@ -78,7 +94,7 @@ def get_outcome_odds(odds_bk: dict, bookmaker: str, outcome: str) -> float | Non
     mapping = OUTCOME_MARKET_MAP.get(outcome)
     if not mapping:
         return None
-    market_key, stake_key = mapping
+    market_key, stake_key, argument = mapping
     bk = odds_bk.get(bookmaker)
     if not isinstance(bk, dict):
         return None
@@ -87,13 +103,12 @@ def get_outcome_odds(odds_bk: dict, bookmaker: str, outcome: str) -> float | Non
     markets = bk.get("markets") or {}
     market = markets.get(market_key) or {}
     stakes = market.get("stakes") or {}
-    # API may use yes/no or y/n variants
     stake = stakes.get(stake_key)
     if stake is None and stake_key == "yes":
         stake = stakes.get("y") or stakes.get("btts_yes")
     if stake is None and stake_key == "no":
         stake = stakes.get("n") or stakes.get("btts_no")
-    return _extract_factor(stake)
+    return _extract_factor(stake, argument)
 
 
 def best_odds_across_bookmakers(

@@ -53,6 +53,18 @@ def _won(outcome: str, home: int, away: int) -> bool | None:
         return home > 0 and away > 0
     if outcome == "btts_no":
         return home == 0 or away == 0
+    if outcome == "total_over_25":
+        return (home + away) > 2.5
+    if outcome == "total_under_25":
+        return (home + away) < 2.5
+    if outcome == "dnb_1":
+        if home == away:
+            return None  # void / push — не считаем win/loss в MVP
+        return home > away
+    if outcome == "dnb_2":
+        if home == away:
+            return None
+        return away > home
     return None
 
 

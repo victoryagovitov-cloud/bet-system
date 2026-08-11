@@ -111,3 +111,47 @@ leagues:
     name_ru: "Профессиональная футбольная лига Аргентины"
     data_quality: medium
     has_xg: false
+
+  # Активны летом / закрывают межсезонье топ-5 Европы (до ~21–28 августа)
+  - id: 242
+    name: "MLS"
+    name_ru: "МЛС"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"
+  - id: 11621
+    name: "Liga MX Apertura"
+    name_ru: "Лига МХ, Апертура"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"
+  - id: 11620
+    name: "Liga MX Clausura"
+    name_ru: "Лига МХ, Клаусура"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"
+  - id: 20
+    name: "Eliteserien"
+    name_ru: "Элитсерия"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"
+  - id: 40
+    name: "Allsvenskan"
+    name_ru: "Аллсвенскан"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"
+  - id: 196
+    name: "J-League 1"
+    name_ru: "Джей-лига 1"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"
+  - id: 410
+    name: "K-League 1"
+    name_ru: "К-Лига 1"
+    data_quality: medium
+    has_xg: false
+    notes: "summer_bridge"

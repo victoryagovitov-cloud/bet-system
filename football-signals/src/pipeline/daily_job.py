@@ -52,6 +52,8 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
     signals: list[value_engine.SignalCandidate] = []
     news_client = _news_client(settings)
     logic_client = _logic_client(settings)
+    matches_with_odds = 0
+    matches_in_whitelist = 0
 
     logger.info("pipeline start date={} bookmakers={}", target_date, bookmakers)
 
@@ -66,7 +68,8 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
             logger.error("failed to fetch matches: {}", exc)
             return []
 
-        logger.info("matches with RU BK odds: {}", len(matches))
+        matches_with_odds = len(matches)
+        logger.info("matches with RU BK odds: {}", matches_with_odds)
 
         allowed = []
         for m in matches:
@@ -77,7 +80,8 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
                 continue
             allowed.append(m)
 
-        logger.info("matches after league whitelist: {}", len(allowed))
+        matches_in_whitelist = len(allowed)
+        logger.info("matches after league whitelist: {}", matches_in_whitelist)
 
         for m in allowed:
             match_id = m.get("id")
@@ -102,7 +106,6 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
                 )
                 continue
 
-            # Edge <= 0 already filtered in value_engine — keep as hard rule.
             stake = stake_engine.calculate_stake_fraction(
                 signal.model_prob,
                 signal.best_odds,
@@ -233,5 +236,19 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
                 anomaly,
             )
 
+    digest = signal_formatter.format_daily_digest(
+        target_date=target_date,
+        matches_with_odds=matches_with_odds,
+        matches_in_whitelist=matches_in_whitelist,
+        signals=signals,
+    )
+    digest_ref = max_publisher.publish_signal(
+        digest,
+        chat_id=settings.max_channel_chat_id,
+        token=settings.max_bot_token,
+        publish_mode=settings.publish_mode,
+        match_id=None,
+    )
+    logger.info("daily digest published ref={} signals={}", digest_ref, len(signals))
     logger.info("pipeline done signals={}", len(signals))
     return signals

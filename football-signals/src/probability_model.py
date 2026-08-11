@@ -143,6 +143,20 @@ def compute(match: dict) -> dict[str, float]:
     )
     p_btts_no = 1.0 - p_btts_yes
 
+    # Totals 2.5
+    p_over_25 = float(
+        sum(matrix[i, j] for i in range(matrix.shape[0]) for j in range(matrix.shape[1]) if i + j >= 3)
+    )
+    p_under_25 = 1.0 - p_over_25
+
+    # Draw No Bet (exclude draws)
+    denom = p_home + p_away
+    if denom > 0:
+        p_dnb_1 = p_home / denom
+        p_dnb_2 = p_away / denom
+    else:
+        p_dnb_1 = p_dnb_2 = 0.5
+
     probs = {
         "w1": p_home,
         "x": p_draw,
@@ -152,6 +166,10 @@ def compute(match: dict) -> dict[str, float]:
         "dc_1x": p_home + p_draw,
         "dc_12": p_home + p_away,
         "dc_x2": p_draw + p_away,
+        "total_over_25": p_over_25,
+        "total_under_25": p_under_25,
+        "dnb_1": p_dnb_1,
+        "dnb_2": p_dnb_2,
         "_lambda_home": lh,
         "_lambda_away": la,
     }
