@@ -1,25 +1,31 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from loguru import logger
 
 ROOT = Path(__file__).resolve().parents[1]
+MAX_API_BASE = "https://platform-api2.max.ru"
 
 
-async def _send_max(text: str, chat_id: int | str, token: str) -> None:
-    try:
-        from maxapi import Bot  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError(
-            "Пакет maxapi не установлен. Добавьте maxapi в requirements и pip install, "
-            "либо оставьте PUBLISH_MODE=dry_run."
-        ) from exc
-
-    bot = Bot(token)
-    await bot.send_message(chat_id=int(chat_id), text=text, format="markdown")
+def _send_max_http(text: str, chat_id: int | str, token: str) -> str:
+    """Отправка через официальный Bot API (platform-api2.max.ru)."""
+    url = f"{MAX_API_BASE}/messages"
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json",
+    }
+    # chat_id как query — так уже успешно отправляли тест в канал
+    params = {"chat_id": int(chat_id)}
+    payload = {"text": text}
+    with httpx.Client(timeout=30.0, verify=False) as client:
+        resp = client.post(url, headers=headers, params=params, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+    mid = ((data.get("message") or {}).get("body") or {}).get("mid")
+    return mid or f"max:{chat_id}"
 
 
 def publish_signal(
@@ -48,6 +54,6 @@ def publish_signal(
     if not token or not chat_id:
         raise ValueError("MAX_BOT_TOKEN / MAX_CHANNEL_CHAT_ID не заданы для live-публикации")
 
-    asyncio.run(_send_max(text, chat_id, token))
-    logger.info("signal published to MAX chat_id={}", chat_id)
-    return f"max:{chat_id}"
+    ref = _send_max_http(text, chat_id, token)
+    logger.info("signal published to MAX chat_id={} ref={}", chat_id, ref)
+    return str(ref)

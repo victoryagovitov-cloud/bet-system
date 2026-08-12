@@ -19,7 +19,7 @@ class QualityVerdict:
 
 
 class OpenAICompatibleClient:
-    """Универсальный клиент chat.completions (AITunnel / OpenRouter / Perplexity)."""
+    """Клиент LLM: OpenAI-compatible (Perplexity/OpenRouter/AITunnel) или Anthropic Messages API."""
 
     def __init__(
         self,
@@ -34,6 +34,9 @@ class OpenAICompatibleClient:
         self.model = model
         self.timeout = timeout
 
+    def _is_anthropic(self) -> bool:
+        return "anthropic.com" in self.base_url.lower()
+
     def chat(
         self,
         messages: list[dict[str, str]],
@@ -43,6 +46,17 @@ class OpenAICompatibleClient:
     ) -> str:
         if not self.api_key:
             raise ValueError("LLM API key is empty")
+        if self._is_anthropic():
+            return self._chat_anthropic(messages, temperature=temperature, max_tokens=max_tokens)
+        return self._chat_openai(messages, temperature=temperature, max_tokens=max_tokens)
+
+    def _chat_openai(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
         url = f"{self.base_url}/chat/completions"
         payload = {
             "model": self.model,
@@ -59,6 +73,55 @@ class OpenAICompatibleClient:
             resp.raise_for_status()
             data = resp.json()
         return data["choices"][0]["message"]["content"]
+
+    def _chat_anthropic(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        system = None
+        converted: list[dict[str, str]] = []
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if role == "system":
+                system = content
+                continue
+            if role not in {"user", "assistant"}:
+                role = "user"
+            converted.append({"role": role, "content": content})
+        if not converted:
+            converted = [{"role": "user", "content": system or ""}]
+            system = None
+
+        # Anthropic base is typically https://api.anthropic.com — endpoint /v1/messages
+        root = self.base_url
+        if root.endswith("/v1"):
+            url = f"{root}/messages"
+        else:
+            url = f"{root}/v1/messages"
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": converted,
+        }
+        if system:
+            payload["system"] = system
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        with httpx.Client(timeout=self.timeout) as client:
+            resp = client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        parts = data.get("content") or []
+        texts = [p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "text"]
+        return "\n".join(texts).strip()
 
 
 def _extract_json(text: str) -> dict[str, Any]:

@@ -52,12 +52,13 @@ NEWS_LLM_BASE_URL=https://api.perplexity.ai
 NEWS_LLM_MODEL=sonar
 
 LOGIC_LLM_ENABLED=true
-LOGIC_LLM_API_KEY=...         # AITunnel / OpenRouter
+LOGIC_LLM_API_KEY=...         # AITunnel / OpenRouter (дешёвая модель)
 LOGIC_LLM_BASE_URL=https://api.aitunnel.ru/v1
 LOGIC_LLM_MODEL=deepseek-chat
 ```
 
-Количественная модель остаётся Python/Пуассон. LLM только на коротком списке кандидатов.
+Количественная модель остаётся Python/Пуассон. LLM только на коротком списке кандидатов:  
+NEWS → Perplexity Sonar; LOGIC → дешёвая модель (по умолчанию DeepSeek; Claude тоже поддерживается через env).
 
 ## GitHub Actions
 
