@@ -50,6 +50,19 @@ class Settings:
     logic_llm_api_key: str
     logic_llm_base_url: str
     logic_llm_model: str
+    # Lock («верняк») stream
+    lock_signals_enabled: bool
+    lock_min_model_probability: float
+    lock_odds_min: float
+    lock_odds_max: float
+    lock_min_lambda_gap: float
+    lock_min_h2h_games: int
+    lock_min_h2h_share: float
+    lock_ai_min_confidence: float
+    lock_stake_fraction: float
+    lock_llm_api_key: str
+    lock_llm_base_url: str
+    lock_llm_model: str
 
 
 @lru_cache(maxsize=1)
@@ -92,6 +105,24 @@ def get_settings() -> Settings:
             "LOGIC_LLM_BASE_URL", "https://api.aitunnel.ru/v1"
         ).rstrip("/"),
         logic_llm_model=os.getenv("LOGIC_LLM_MODEL", "deepseek-chat"),
+        lock_signals_enabled=_bool(os.getenv("LOCK_SIGNALS_ENABLED"), True),
+        lock_min_model_probability=float(os.getenv("LOCK_MIN_MODEL_PROBABILITY", "0.78")),
+        lock_odds_min=float(os.getenv("LOCK_ODDS_MIN", "1.12")),
+        lock_odds_max=float(os.getenv("LOCK_ODDS_MAX", "1.45")),
+        lock_min_lambda_gap=float(os.getenv("LOCK_MIN_LAMBDA_GAP", "0.35")),
+        lock_min_h2h_games=int(os.getenv("LOCK_MIN_H2H_GAMES", "5")),
+        lock_min_h2h_share=float(os.getenv("LOCK_MIN_H2H_SHARE", "0.65")),
+        lock_ai_min_confidence=float(os.getenv("LOCK_AI_MIN_CONFIDENCE", "0.75")),
+        lock_stake_fraction=float(os.getenv("LOCK_STAKE_FRACTION", str(1.0 / 60.0))),
+        # Default lock LLM = same as logic LLM
+        lock_llm_api_key=os.getenv("LOCK_LLM_API_KEY")
+        or os.getenv("LOGIC_LLM_API_KEY", ""),
+        lock_llm_base_url=(
+            os.getenv("LOCK_LLM_BASE_URL")
+            or os.getenv("LOGIC_LLM_BASE_URL", "https://api.aitunnel.ru/v1")
+        ).rstrip("/"),
+        lock_llm_model=os.getenv("LOCK_LLM_MODEL")
+        or os.getenv("LOGIC_LLM_MODEL", "deepseek-chat"),
     )
 
 

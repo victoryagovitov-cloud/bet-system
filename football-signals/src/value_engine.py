@@ -1,7 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+
+
+# Markets allowed as «верняк» candidates (favorite win / not lose).
+LOCK_OUTCOMES = frozenset({"w1", "w2", "dnb_1", "dnb_2", "dc_1x", "dc_x2"})
+
+# Outcome → which side is the modeled favorite for H2H / λ checks.
+_OUTCOME_FAVORITE_SIDE: dict[str, str] = {
+    "w1": "home",
+    "dnb_1": "home",
+    "dc_1x": "home",
+    "w2": "away",
+    "dnb_2": "away",
+    "dc_x2": "away",
+}
 
 
 @dataclass
@@ -21,6 +35,11 @@ class SignalCandidate:
     stake_fraction: float = 0.0
     lambda_home: float | None = None
     lambda_away: float | None = None
+    # "value" | "lock"
+    signal_kind: str = "value"
+    # AI lock reasons (filled after check_lock)
+    lock_reasons: list[str] = field(default_factory=list)
+    lock_confidence: float | None = None
 
 
 # (market_key, stake_key, line_argument|None)
@@ -188,9 +207,124 @@ def find_signal(
                 edge=float(edge),
                 lambda_home=model_probs.get("_lambda_home"),
                 lambda_away=model_probs.get("_lambda_away"),
+                signal_kind="value",
             )
         )
 
     if not candidates:
         return None
     return max(candidates, key=lambda c: c.edge)
+
+
+def _h2h_favorite_share(match: dict, side: str) -> tuple[float | None, int]:
+    """Return (favorite win-share with draws=0.5, games) from pregame.h2h."""
+    pregame = match.get("pregame") or {}
+    h2h = ((pregame.get("h2h") or {}).get("teamDuel")) or {}
+    home_wins = float(h2h.get("homeWins") or 0)
+    away_wins = float(h2h.get("awayWins") or 0)
+    draws = float(h2h.get("draws") or 0)
+    total = home_wins + away_wins + draws
+    if total <= 0:
+        return None, 0
+    if side == "home":
+        share = (home_wins + 0.5 * draws) / total
+    else:
+        share = (away_wins + 0.5 * draws) / total
+    return share, int(total)
+
+
+def _dominance_ok(
+    match: dict,
+    outcome: str,
+    model_probs: dict[str, float],
+    *,
+    min_lambda_gap: float,
+    min_h2h_games: int,
+    min_h2h_share: float,
+) -> bool:
+    side = _OUTCOME_FAVORITE_SIDE.get(outcome)
+    if side is None:
+        return False
+    lh = model_probs.get("_lambda_home")
+    la = model_probs.get("_lambda_away")
+    if lh is not None and la is not None:
+        gap = abs(float(lh) - float(la))
+        if gap >= min_lambda_gap:
+            # λ must favor the same side as the outcome
+            if side == "home" and float(lh) >= float(la):
+                return True
+            if side == "away" and float(la) >= float(lh):
+                return True
+    share, games = _h2h_favorite_share(match, side)
+    if share is not None and games >= min_h2h_games and share >= min_h2h_share:
+        return True
+    return False
+
+
+def find_lock_candidate(
+    match: dict,
+    model_probs: dict[str, float],
+    bookmaker_ids: list[str],
+    *,
+    min_model_probability: float = 0.78,
+    odds_min: float = 1.12,
+    odds_max: float = 1.45,
+    min_lambda_gap: float = 0.35,
+    min_h2h_games: int = 5,
+    min_h2h_share: float = 0.65,
+) -> SignalCandidate | None:
+    """
+    Soft prefilter for «верняк» candidates. Does NOT decide the lock —
+    AI judge must approve. Odds band is only a discussion corridor, not a definition.
+    Picks the outcome with highest model_prob among eligible markets.
+    """
+    odds_bk = match.get("oddsBk") or {}
+    candidates: list[SignalCandidate] = []
+
+    tournament = match.get("tournament") or {}
+    league_id = int(tournament.get("id") or 0)
+    league_name = (tournament.get("translations") or {}).get("ru") or tournament.get("name") or "?"
+
+    for outcome in LOCK_OUTCOMES:
+        model_prob = model_probs.get(outcome)
+        if model_prob is None or model_prob < min_model_probability:
+            continue
+        if not _dominance_ok(
+            match,
+            outcome,
+            model_probs,
+            min_lambda_gap=min_lambda_gap,
+            min_h2h_games=min_h2h_games,
+            min_h2h_share=min_h2h_share,
+        ):
+            continue
+        best_bk, best_odds = best_odds_across_bookmakers(odds_bk, bookmaker_ids, outcome)
+        if best_bk is None or best_odds is None:
+            continue
+        if best_odds < odds_min or best_odds > odds_max:
+            continue
+        implied = 1.0 / best_odds
+        edge = float(model_prob) - implied
+        candidates.append(
+            SignalCandidate(
+                match_id=int(match["id"]),
+                home_team=_team_name(match.get("homeTeam")),
+                away_team=_team_name(match.get("awayTeam")),
+                league_id=league_id,
+                league_name=league_name,
+                kickoff=match.get("dateEvent"),
+                outcome=outcome,
+                outcome_label=OUTCOME_LABELS.get(outcome, outcome),
+                model_prob=float(model_prob),
+                best_bookmaker=best_bk,
+                best_odds=float(best_odds),
+                edge=float(edge),
+                lambda_home=model_probs.get("_lambda_home"),
+                lambda_away=model_probs.get("_lambda_away"),
+                signal_kind="lock",
+            )
+        )
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda c: c.model_prob)

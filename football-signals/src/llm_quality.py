@@ -16,6 +16,41 @@ class QualityVerdict:
     ok: bool
     summary: str
     raw: str | None = None
+    confidence: float | None = None
+    reasons: list[str] | None = None
+    risks: list[str] | None = None
+
+
+def _compact_match_context(match: dict, model_probs: dict[str, float], signal: SignalCandidate) -> dict[str, Any]:
+    """Shrink API match detail for the lock judge prompt."""
+    pregame = match.get("pregame") or {}
+    probs_public = {
+        k: round(float(v), 4)
+        for k, v in model_probs.items()
+        if not str(k).startswith("_") and isinstance(v, (int, float))
+    }
+    return {
+        "match_id": match.get("id"),
+        "home": signal.home_team,
+        "away": signal.away_team,
+        "league": signal.league_name,
+        "kickoff": signal.kickoff,
+        "proposed_outcome": signal.outcome,
+        "proposed_label": signal.outcome_label,
+        "model_prob": round(signal.model_prob, 4),
+        "best_bookmaker": signal.best_bookmaker,
+        "best_odds": round(signal.best_odds, 3),
+        "implied": round(1.0 / signal.best_odds, 4) if signal.best_odds > 0 else None,
+        "edge": round(signal.edge, 4),
+        "lambda_home": model_probs.get("_lambda_home"),
+        "lambda_away": model_probs.get("_lambda_away"),
+        "model_probs": probs_public,
+        "pregame_h2h": (pregame.get("h2h") or {}).get("teamDuel"),
+        "pregame_streaks": (pregame.get("teamStreaks") or {}).get("general"),
+        "pregame_form": pregame.get("form"),
+        "tournament": (match.get("tournament") or {}).get("name"),
+        "round": match.get("roundInfo"),
+    }
 
 
 class OpenAICompatibleClient:
@@ -219,3 +254,82 @@ def check_logic(
     except Exception as exc:
         logger.warning("logic check failed: {}", exc)
         return QualityVerdict(True, f"logic check error (fail-open): {exc}")
+
+
+def check_lock(
+    signal: SignalCandidate,
+    match_detail: dict,
+    model_probs: dict[str, float],
+    *,
+    client: OpenAICompatibleClient | None,
+    enabled: bool,
+    min_confidence: float = 0.75,
+) -> QualityVerdict:
+    """
+    AI judge for «верняк». Fail-closed: без клиента / ошибки / is_lock=false — ok=False.
+    Кэф сам по себе не делает верняк — решение по совокупности данных API.
+    """
+    if not enabled or client is None:
+        return QualityVerdict(
+            False,
+            "lock check skipped (no LLM) — fail-closed",
+            confidence=0.0,
+            reasons=[],
+            risks=["no_llm"],
+        )
+
+    context = _compact_match_context(match_detail, model_probs, signal)
+    prompt = (
+        "Ты спортивный аналитик. Нужно решить, является ли исход «верняком» "
+        "(явный безоговорочный фаворит по совокупности данных), а НЕ value-ставкой.\n"
+        "Низкий коэффициент букмекера САМ ПО СЕБЕ НЕ делает исход верняком.\n"
+        "Смотри h2h, streaks/form, λ модели, полный набор вероятностей, согласованность линии.\n"
+        "Верняк = очень высокая уверенность, что фаворит не проиграет / победит, "
+        "и данные API это подтверждают без серьёзных красных флагов.\n\n"
+        f"Контекст (JSON):\n{json.dumps(context, ensure_ascii=False)}\n\n"
+        "Ответь СТРОГО JSON:\n"
+        '{"is_lock": true|false, "confidence": 0.0-1.0, '
+        '"reasons": ["..."], "risks": ["..."]}\n'
+        "reasons — кратко по-русски, опираясь на факты из JSON."
+    )
+    try:
+        raw = client.chat(
+            [
+                {"role": "system", "content": "Отвечай только валидным JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=700,
+        )
+        data = _extract_json(raw)
+        is_lock = bool(data.get("is_lock", False))
+        try:
+            confidence = float(data.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        reasons_raw = data.get("reasons") or []
+        risks_raw = data.get("risks") or []
+        reasons = [str(x) for x in reasons_raw] if isinstance(reasons_raw, list) else [str(reasons_raw)]
+        risks = [str(x) for x in risks_raw] if isinstance(risks_raw, list) else [str(risks_raw)]
+        ok = is_lock and confidence >= min_confidence
+        summary = "; ".join(reasons)[:1000] if reasons else (
+            f"is_lock={is_lock} confidence={confidence:.2f}"
+        )
+        if not ok and is_lock and confidence < min_confidence:
+            summary = f"confidence {confidence:.2f} < {min_confidence:.2f}; " + summary
+        return QualityVerdict(
+            ok,
+            summary,
+            raw,
+            confidence=confidence,
+            reasons=reasons,
+            risks=risks,
+        )
+    except Exception as exc:
+        logger.warning("lock check failed: {}", exc)
+        return QualityVerdict(
+            False,
+            f"lock check error (fail-closed): {exc}",
+            confidence=0.0,
+            reasons=[],
+            risks=[str(exc)],
+        )

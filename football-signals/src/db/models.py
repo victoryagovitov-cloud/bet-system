@@ -40,7 +40,9 @@ class SignalRow(Base):
     best_odds: Mapped[float] = mapped_column(Float)
     edge: Mapped[float] = mapped_column(Float)
     stake_fraction: Mapped[float] = mapped_column(Float)
-    # published | blocked_news | blocked_logic | skipped_dup
+    # value | lock
+    signal_kind: Mapped[str] = mapped_column(String(16), default="value")
+    # published | blocked_news | blocked_logic | blocked_lock | skipped_dup
     status: Mapped[str] = mapped_column(String(32), default="published")
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     publish_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -78,6 +80,7 @@ def _ensure_sqlite_columns(engine) -> None:
         }
         wanted = {
             "status": "VARCHAR(32) DEFAULT 'published'",
+            "signal_kind": "VARCHAR(16) DEFAULT 'value'",
             "odds_min": "FLOAT",
             "odds_max": "FLOAT",
             "odds_spread": "FLOAT",

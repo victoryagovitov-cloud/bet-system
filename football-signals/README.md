@@ -4,13 +4,15 @@
 
 1. Prematch из [API-SPORT.ru](https://docs.api-sport.ru/) только с RU-БК (`marathon/melbet/betboom/pari`)
 2. Whitelist лиг → независимая вероятность (Пуассон на pregame)
-3. Публикация **только** при `P_model ≥ 80%` **и** `edge = P_model − 1/odds > 0`
-4. Ставка: `min(¼ Kelly, 1/30 банка)`
-5. Дедуп по `(match_id, outcome)` — повторно не публикуем
-6. Опциональный LLM-gate: новости (Perplexity) + логика (дешёвая модель)
-7. MAX или dry-run + SQLite (+ Brier/CLV/статистика по лигам)
+3. **VALUE:** публикация при `P_model ≥ 80%` **и** `edge = P_model − 1/odds > 0`
+4. **ВЕРНЯК:** мягкий префильтр + обязательный AI по данным API (кэф сам по себе не критерий); edge может быть ≈0
+5. На матч — не больше одного сигнала (value приоритетнее)
+6. Ставка value: `min(¼ Kelly, 1/30 банка)`; верняк: фикс `1/60` банка
+7. Дедуп по `(match_id, outcome)` — повторно не публикуем
+8. Опциональный LLM-gate для value: новости (Perplexity) + логика; для верняка AI обязателен (fail-closed)
+9. MAX или dry-run + SQLite (+ Brier/CLV/статистика по лигам)
 
-Таргет канала: **0–5 сигналов/день** (живость + качество). Частоту регулируем whitelist’ом и спектром рынков, **не** снижением порога 80% и **не** отключением edge>0.
+Таргет канала: **0–5 сигналов/день** (живость + качество). Частоту регулируем whitelist’ом и спектром рынков, **не** снижением порога 80% и **не** отключением edge>0 для value.
 
 В межсезонье топ-5 Европы (до ~21–28 августа) в whitelist добавлены «летние» лиги: MLS, Liga MX, Eliteserien, Allsvenskan, J-League 1, K-League 1.
 
@@ -55,10 +57,14 @@ LOGIC_LLM_ENABLED=true
 LOGIC_LLM_API_KEY=...         # AITunnel / OpenRouter (дешёвая модель)
 LOGIC_LLM_BASE_URL=https://api.aitunnel.ru/v1
 LOGIC_LLM_MODEL=deepseek-chat
+
+# Верняки (AI обязателен; без ключа не публикуются)
+LOCK_SIGNALS_ENABLED=true
+LOCK_LLM_API_KEY=...          # по умолчанию = LOGIC_LLM_API_KEY
 ```
 
 Количественная модель остаётся Python/Пуассон. LLM только на коротком списке кандидатов:  
-NEWS → Perplexity Sonar; LOGIC → дешёвая модель (по умолчанию DeepSeek; Claude тоже поддерживается через env).
+NEWS → Perplexity Sonar; LOGIC → дешёвая модель; LOCK → тот же LOGIC-клиент (или `LOCK_LLM_*`).
 
 ## GitHub Actions
 

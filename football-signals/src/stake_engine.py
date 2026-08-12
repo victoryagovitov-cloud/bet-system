@@ -31,3 +31,10 @@ def calculate_stake_fraction(
         kelly = full_kelly / 4.0
 
     return float(min(kelly, hard_cap))
+
+
+def calculate_lock_stake_fraction(cap: float = 1.0 / 60.0) -> float:
+    """Fixed fraction for «верняк» (no Kelly — edge may be ~0)."""
+    if cap <= 0:
+        return 0.0
+    return float(cap)
