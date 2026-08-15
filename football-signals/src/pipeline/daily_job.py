@@ -27,21 +27,41 @@ from src import (
 def _news_client(settings):
     if not (settings.llm_quality_enabled and settings.news_llm_enabled and settings.news_llm_api_key):
         return None
-    return llm_quality.OpenAICompatibleClient(
+    primary = llm_quality.OpenAICompatibleClient(
         api_key=settings.news_llm_api_key,
         base_url=settings.news_llm_base_url,
         model=settings.news_llm_model,
+        label="news-primary",
     )
+    fallback = None
+    if settings.news_llm_fallback_api_key and settings.news_llm_fallback_model:
+        fallback = llm_quality.OpenAICompatibleClient(
+            api_key=settings.news_llm_fallback_api_key,
+            base_url=settings.news_llm_fallback_base_url,
+            model=settings.news_llm_fallback_model,
+            label="news-fallback",
+        )
+    return llm_quality.FailoverClient(primary, fallback)
 
 
 def _logic_client(settings):
     if not (settings.llm_quality_enabled and settings.logic_llm_enabled and settings.logic_llm_api_key):
         return None
-    return llm_quality.OpenAICompatibleClient(
+    primary = llm_quality.OpenAICompatibleClient(
         api_key=settings.logic_llm_api_key,
         base_url=settings.logic_llm_base_url,
         model=settings.logic_llm_model,
+        label="logic-primary",
     )
+    fallback = None
+    if settings.logic_llm_fallback_api_key and settings.logic_llm_fallback_model:
+        fallback = llm_quality.OpenAICompatibleClient(
+            api_key=settings.logic_llm_fallback_api_key,
+            base_url=settings.logic_llm_fallback_base_url,
+            model=settings.logic_llm_fallback_model,
+            label="logic-fallback",
+        )
+    return llm_quality.FailoverClient(primary, fallback)
 
 
 def _lock_client(settings):
@@ -50,11 +70,21 @@ def _lock_client(settings):
         return None
     if not settings.lock_llm_api_key:
         return None
-    return llm_quality.OpenAICompatibleClient(
+    primary = llm_quality.OpenAICompatibleClient(
         api_key=settings.lock_llm_api_key,
         base_url=settings.lock_llm_base_url,
         model=settings.lock_llm_model,
+        label="lock-primary",
     )
+    fallback = None
+    if settings.lock_llm_fallback_api_key and settings.lock_llm_fallback_model:
+        fallback = llm_quality.OpenAICompatibleClient(
+            api_key=settings.lock_llm_fallback_api_key,
+            base_url=settings.lock_llm_fallback_base_url,
+            model=settings.lock_llm_fallback_model,
+            label="lock-fallback",
+        )
+    return llm_quality.FailoverClient(primary, fallback)
 
 
 def _try_publish(
@@ -225,9 +255,23 @@ def _try_publish(
     return signal
 
 
-def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.SignalCandidate]:
+def run_daily_pipeline(
+    target_date: date | list[date] | None = None,
+) -> list[value_engine.SignalCandidate]:
+    """
+    Прогон по одной или нескольким датам (по умолчанию вызывающий код задаёт today+tomorrow).
+    В конце ВСЕГДА публикуется сводка — канал не молчит даже при 0 ставках.
+    """
     settings = get_settings()
-    target_date = target_date or date.today()
+    if target_date is None:
+        dates = [date.today()]
+    elif isinstance(target_date, date):
+        dates = [target_date]
+    else:
+        dates = list(target_date)
+    if not dates:
+        dates = [date.today()]
+
     bookmakers = settings.bookmakers_whitelist
     repo = SignalRepository(settings.database_url)
     signals: list[value_engine.SignalCandidate] = []
@@ -236,133 +280,138 @@ def run_daily_pipeline(target_date: date | None = None) -> list[value_engine.Sig
     lock_client = _lock_client(settings)
     matches_with_odds = 0
     matches_in_whitelist = 0
+    label = ",".join(d.isoformat() for d in dates)
 
-    logger.info("pipeline start date={} bookmakers={}", target_date, bookmakers)
+    logger.info("pipeline start dates={} bookmakers={}", label, bookmakers)
 
     with ApiSportClient(
         settings.api_sport_base_url,
         settings.api_sport_key,
         settings.api_sport_sport_slug,
     ) as client:
-        try:
-            matches = client.get_matches(target_date, bookmakers)
-        except ApiSportError as exc:
-            logger.error("failed to fetch matches: {}", exc)
-            return []
-
-        matches_with_odds = len(matches)
-        logger.info("matches with RU BK odds: {}", matches_with_odds)
-
-        allowed = []
-        for m in matches:
-            league_id = ((m.get("tournament") or {}).get("id"))
-            if not is_league_allowed(league_id):
-                continue
-            if m.get("status") != "notstarted":
-                continue
-            allowed.append(m)
-
-        matches_in_whitelist = len(allowed)
-        logger.info("matches after league whitelist: {}", matches_in_whitelist)
-
-        for m in allowed:
-            match_id = m.get("id")
+        for day in dates:
             try:
-                detail = client.get_match_detail(int(match_id), bookmakers)
+                matches = client.get_matches(day, bookmakers)
             except ApiSportError as exc:
-                logger.warning("skip match {}: {}", match_id, exc)
+                logger.error("failed to fetch matches for {}: {}", day, exc)
                 continue
 
-            model_probs = probability_model.compute(detail)
+            matches_with_odds += len(matches)
+            logger.info("date={} matches with RU BK odds: {}", day, len(matches))
 
-            # 1) VALUE first
-            signal = value_engine.find_signal(
-                detail,
-                model_probs,
-                bookmakers,
-                min_model_probability=settings.min_model_probability,
-            )
-            if signal:
-                stake = stake_engine.calculate_stake_fraction(
-                    signal.model_prob,
-                    signal.best_odds,
-                    kelly_mode=settings.kelly_fraction_mode,
-                    hard_cap=settings.stake_hard_cap_fraction,
+            allowed = []
+            for m in matches:
+                league_id = ((m.get("tournament") or {}).get("id"))
+                if not is_league_allowed(league_id):
+                    continue
+                if m.get("status") != "notstarted":
+                    continue
+                allowed.append(m)
+
+            matches_in_whitelist += len(allowed)
+            logger.info("date={} after league whitelist: {}", day, len(allowed))
+
+            for m in allowed:
+                match_id = m.get("id")
+                try:
+                    detail = client.get_match_detail(int(match_id), bookmakers)
+                except ApiSportError as exc:
+                    logger.warning("skip match {}: {}", match_id, exc)
+                    continue
+
+                model_probs = probability_model.compute(detail)
+
+                # 1) VALUE first
+                signal = value_engine.find_signal(
+                    detail,
+                    model_probs,
+                    bookmakers,
+                    min_model_probability=settings.min_model_probability,
+                    min_edge=settings.min_edge,
                 )
-                if stake <= 0:
-                    logger.info(
-                        "value kelly=0 match={} outcome={} — try lock path",
+                if signal:
+                    stake = stake_engine.calculate_stake_fraction(
+                        signal.model_prob,
+                        signal.best_odds,
+                        kelly_mode=settings.kelly_fraction_mode,
+                        hard_cap=settings.stake_hard_cap_fraction,
+                    )
+                    if stake <= 0:
+                        logger.info(
+                            "value kelly=0 match={} outcome={} — try lock path",
+                            match_id,
+                            signal.outcome,
+                        )
+                        signal = None
+                    else:
+                        signal.stake_fraction = stake
+                        published = _try_publish(
+                            signal=signal,
+                            detail=detail,
+                            model_probs=model_probs,
+                            settings=settings,
+                            repo=repo,
+                            bookmakers=bookmakers,
+                            news_client=news_client,
+                            logic_client=logic_client,
+                            lock_client=lock_client,
+                        )
+                        if published:
+                            signals.append(published)
+                            continue
+
+                # 2) LOCK if no value published
+                if not settings.lock_signals_enabled:
+                    logger.debug(
+                        "no value and locks disabled match={} probs={}",
                         match_id,
-                        signal.outcome,
+                        probability_model.summarize_for_log(model_probs),
                     )
-                    signal = None
-                else:
-                    signal.stake_fraction = stake
-                    published = _try_publish(
-                        signal=signal,
-                        detail=detail,
-                        model_probs=model_probs,
-                        settings=settings,
-                        repo=repo,
-                        bookmakers=bookmakers,
-                        news_client=news_client,
-                        logic_client=logic_client,
-                        lock_client=lock_client,
+                    continue
+
+                lock_signal = value_engine.find_lock_candidate(
+                    detail,
+                    model_probs,
+                    bookmakers,
+                    min_model_probability=settings.lock_min_model_probability,
+                    odds_min=settings.lock_odds_min,
+                    odds_max=settings.lock_odds_max,
+                    min_lambda_gap=settings.lock_min_lambda_gap,
+                    min_h2h_games=settings.lock_min_h2h_games,
+                    min_h2h_share=settings.lock_min_h2h_share,
+                )
+                if not lock_signal:
+                    logger.debug(
+                        "no signal match={} probs={}",
+                        match_id,
+                        probability_model.summarize_for_log(model_probs),
                     )
-                    if published:
-                        signals.append(published)
-                        continue
+                    continue
 
-            # 2) LOCK if no value published
-            if not settings.lock_signals_enabled:
-                logger.debug(
-                    "no value and locks disabled match={} probs={}",
-                    match_id,
-                    probability_model.summarize_for_log(model_probs),
+                lock_signal.stake_fraction = stake_engine.calculate_lock_stake_fraction(
+                    settings.lock_stake_fraction
                 )
-                continue
-
-            lock_signal = value_engine.find_lock_candidate(
-                detail,
-                model_probs,
-                bookmakers,
-                min_model_probability=settings.lock_min_model_probability,
-                odds_min=settings.lock_odds_min,
-                odds_max=settings.lock_odds_max,
-                min_lambda_gap=settings.lock_min_lambda_gap,
-                min_h2h_games=settings.lock_min_h2h_games,
-                min_h2h_share=settings.lock_min_h2h_share,
-            )
-            if not lock_signal:
-                logger.debug(
-                    "no signal match={} probs={}",
-                    match_id,
-                    probability_model.summarize_for_log(model_probs),
+                published = _try_publish(
+                    signal=lock_signal,
+                    detail=detail,
+                    model_probs=model_probs,
+                    settings=settings,
+                    repo=repo,
+                    bookmakers=bookmakers,
+                    news_client=news_client,
+                    logic_client=logic_client,
+                    lock_client=lock_client,
                 )
-                continue
+                if published:
+                    signals.append(published)
 
-            lock_signal.stake_fraction = stake_engine.calculate_lock_stake_fraction(
-                settings.lock_stake_fraction
-            )
-            published = _try_publish(
-                signal=lock_signal,
-                detail=detail,
-                model_probs=model_probs,
-                settings=settings,
-                repo=repo,
-                bookmakers=bookmakers,
-                news_client=news_client,
-                logic_client=logic_client,
-                lock_client=lock_client,
-            )
-            if published:
-                signals.append(published)
-
+    digest_date = dates[0] if len(dates) == 1 else dates[-1]
     digest = signal_formatter.format_daily_digest(
-        target_date=target_date,
+        target_date=digest_date,
         matches_with_odds=matches_with_odds,
         matches_in_whitelist=matches_in_whitelist,
         signals=signals,
+        date_window=dates if len(dates) > 1 else None,
     )
     digest_ref = max_publisher.publish_signal(
         digest,

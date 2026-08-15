@@ -56,7 +56,8 @@ class SignalRepository:
             stake_fraction=signal.stake_fraction,
             signal_kind=getattr(signal, "signal_kind", None) or "value",
             status=status,
-            published_at=datetime.utcnow() if status == "published" else None,
+            # published_at NOT NULL в старой SQLite-схеме — всегда пишем timestamp
+            published_at=datetime.utcnow(),
             publish_ref=publish_ref,
             odds_min=odds_min,
             odds_max=odds_max,

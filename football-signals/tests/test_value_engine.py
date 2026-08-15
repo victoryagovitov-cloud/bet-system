@@ -49,3 +49,21 @@ def test_no_signal_when_edge_non_positive():
     # implied 1/1.10 ≈ 0.909 > 0.80 → edge negative
     signal = find_signal(match, {"w1": 0.80, "x": 0.1, "w2": 0.1}, ["melbet"], 0.80)
     assert signal is None
+
+
+def test_min_edge_filters_tiny_edge():
+    match = {
+        "id": 3,
+        "tournament": {"id": 17, "name": "PL"},
+        "homeTeam": {"name": "A"},
+        "awayTeam": {"name": "B"},
+        "oddsBk": {
+            "melbet": {
+                "isBettingActive": True,
+                # implied ≈ 0.833, model 0.85 → edge ≈ 0.017 < 0.03
+                "markets": {"result": {"stakes": {"w1": {"factor": 1.20}}}},
+            }
+        },
+    }
+    assert find_signal(match, {"w1": 0.85}, ["melbet"], 0.80, min_edge=0.03) is None
+    assert find_signal(match, {"w1": 0.85}, ["melbet"], 0.80, min_edge=0.01) is not None

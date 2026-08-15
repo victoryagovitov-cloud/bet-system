@@ -27,6 +27,21 @@ def test_home_favorite_from_h2h():
     assert probs["w1"] > probs["w2"]
 
 
+def test_form_boosts_attack():
+    weak = compute(_fake_match(home_wins=5, away_wins=5, draws=0))
+    strong = compute(
+        {
+            "pregame": {
+                "h2h": {"teamDuel": {"homeWins": 5, "awayWins": 5, "draws": 0}},
+                "teamStreaks": {"general": []},
+                "form": {"home": "WWWWW", "away": "LLLLL"},
+            }
+        }
+    )
+    assert strong["_lambda_home"] > weak["_lambda_home"]
+    assert strong["_lambda_away"] < weak["_lambda_away"]
+
+
 def test_totals_and_dnb_present():
     probs = compute(_fake_match(home_wins=10, away_wins=1, draws=1))
     assert "total_over_25" in probs

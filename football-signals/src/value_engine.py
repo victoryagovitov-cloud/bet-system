@@ -54,24 +54,25 @@ OUTCOME_MARKET_MAP: dict[str, tuple[str, str, float | None]] = {
     "dc_x2": ("double_chance", "x2", None),
     "total_over_25": ("total", "over", 2.5),
     "total_under_25": ("total", "under", 2.5),
-    # European handicap 0 ≈ DNB (ничья — возврат)
+    # European handicap 0 = фора (0), ничья — возврат
     "dnb_1": ("handicap", "handicap_1", 0.0),
     "dnb_2": ("handicap", "handicap_2", 0.0),
 }
 
+# Подписи как у RU-БК (Марафон / Melbet / BetBoom / Пари)
 OUTCOME_LABELS = {
     "w1": "П1",
     "x": "X",
     "w2": "П2",
-    "btts_yes": "Обе забьют — да",
-    "btts_no": "Обе забьют — нет",
+    "btts_yes": "ОЗ — да",
+    "btts_no": "ОЗ — нет",
     "dc_1x": "1X",
     "dc_12": "12",
     "dc_x2": "X2",
     "total_over_25": "ТБ 2.5",
     "total_under_25": "ТМ 2.5",
-    "dnb_1": "DNB П1",
-    "dnb_2": "DNB П2",
+    "dnb_1": "Ф1 (0)",
+    "dnb_2": "Ф2 (0)",
 }
 
 
@@ -165,9 +166,10 @@ def find_signal(
     model_probs: dict[str, float],
     bookmaker_ids: list[str],
     min_model_probability: float = 0.80,
+    min_edge: float = 0.03,
 ) -> SignalCandidate | None:
     """
-    Берём исходы с P_model >= threshold, положительным edge против лучшего из 4 БК,
+    Берём исходы с P_model >= threshold, edge >= min_edge против лучшего из 4 БК,
     публикуем один исход на матч — с максимальным edge.
     """
     odds_bk = match.get("oddsBk") or {}
@@ -189,7 +191,7 @@ def find_signal(
             continue
         implied = 1.0 / best_odds
         edge = model_prob - implied
-        if edge <= 0:
+        if edge < min_edge:
             continue
         candidates.append(
             SignalCandidate(

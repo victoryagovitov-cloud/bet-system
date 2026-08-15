@@ -28,12 +28,12 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Daily football signals pipeline")
     p.add_argument(
         "--date",
-        help="YYYY-MM-DD (default: tomorrow in TIMEZONE)",
+        help="YYYY-MM-DD — только эта дата (иначе сегодня+завтра)",
     )
     p.add_argument(
         "--today",
         action="store_true",
-        help="Use today instead of tomorrow",
+        help="Только сегодня (без завтра)",
     )
     return p.parse_args()
 
@@ -44,15 +44,21 @@ def main() -> int:
     now = _today_in_timezone(settings.timezone)
 
     if args.date:
-        target = date.fromisoformat(args.date)
+        dates = [date.fromisoformat(args.date)]
     elif args.today:
-        target = now
+        # Один день — сегодня
+        dates = [now]
     else:
-        target = now + timedelta(days=1)
+        # По умолчанию: сегодня + завтра — выше шанс, что в канале будет ставка,
+        # а сводка уйдёт в любом случае.
+        dates = [now, now + timedelta(days=1)]
 
-    logger.info("run_daily target_date={} publish_mode={}", target, settings.publish_mode)
-    signals = run_daily_pipeline(target)
-    print(f"signals_published={len(signals)} date={target.isoformat()}")
+    logger.info("run_daily dates={} publish_mode={}", dates, settings.publish_mode)
+    signals = run_daily_pipeline(dates)
+    print(
+        f"signals_published={len(signals)} dates="
+        + ",".join(d.isoformat() for d in dates)
+    )
     for s in signals:
         print(
             f"- {s.home_team} vs {s.away_team} | {s.outcome_label} | "

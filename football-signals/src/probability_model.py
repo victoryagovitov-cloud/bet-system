@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import numpy as np
 from scipy.stats import poisson
@@ -58,9 +59,40 @@ def _streak_maps(pregame: dict) -> tuple[dict[str, float], dict[str, float]]:
     return home, away
 
 
+def _form_attack_shift(form: Any, side: str) -> float:
+    """
+    Сдвиг λ по строке формы (W/D/L). Поддерживает:
+    - dict {"home": "WWDLW", "away": "..."}
+    - dict с ключами homeForm/awayForm
+    - строку только если side совпадает с единственным полем
+    """
+    if not form:
+        return 0.0
+    raw = None
+    if isinstance(form, dict):
+        raw = (
+            form.get(side)
+            or form.get(f"{side}Form")
+            or form.get(f"{side}_form")
+            or form.get("home" if side == "home" else "away")
+        )
+        if isinstance(raw, dict):
+            raw = raw.get("form") or raw.get("string") or raw.get("value")
+    elif isinstance(form, str) and side == "home":
+        raw = form
+    if not isinstance(raw, str) or not raw.strip():
+        return 0.0
+    letters = [c.upper() for c in raw if c.upper() in {"W", "D", "L"}][-5:]
+    if not letters:
+        return 0.0
+    points = sum(3 if c == "W" else 1 if c == "D" else 0 for c in letters)
+    avg = points / (3 * len(letters))  # 0..1
+    return (avg - 0.5) * 0.35
+
+
 def _estimate_lambdas(match: dict) -> tuple[float, float]:
     """
-    Независимая оценка ожидаемых голов по pregame (h2h + streaks).
+    Независимая оценка ожидаемых голов по pregame (h2h + streaks + form).
     Коэффициенты букмекеров НЕ используются.
     """
     pregame = match.get("pregame") or {}
@@ -93,6 +125,15 @@ def _estimate_lambdas(match: dict) -> tuple[float, float]:
         losses = streaks.get("losses")
         if losses is not None and losses >= 3:
             base -= 0.15
+        wins = streaks.get("wins")
+        if wins is not None and wins >= 3:
+            base += min(0.20, 0.05 * wins)
+        no_losses = streaks.get("no losses")
+        if no_losses is not None and no_losses >= 4:
+            base += 0.08
+        first = streaks.get("first to score")
+        if first is not None and first >= 0.7:
+            base += 0.10
         return base
 
     lambda_home = apply_over(home_s, lambda_home)
@@ -103,6 +144,14 @@ def _estimate_lambdas(match: dict) -> tuple[float, float]:
         lambda_home += 0.15
     if home_s.get("without clean sheet", 0) >= 5:
         lambda_away += 0.15
+    if home_s.get("no goals conceded", 0) >= 3:
+        lambda_away -= 0.12
+    if away_s.get("no goals conceded", 0) >= 3:
+        lambda_home -= 0.12
+
+    form = pregame.get("form")
+    lambda_home += _form_attack_shift(form, "home")
+    lambda_away += _form_attack_shift(form, "away")
 
     lambda_home = float(np.clip(lambda_home, 0.35, 3.2))
     lambda_away = float(np.clip(lambda_away, 0.25, 3.0))

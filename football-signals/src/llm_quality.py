@@ -63,11 +63,13 @@ class OpenAICompatibleClient:
         base_url: str,
         model: str,
         timeout: float = 60.0,
+        label: str = "primary",
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.label = label
 
     def _is_anthropic(self) -> bool:
         return "anthropic.com" in self.base_url.lower()
@@ -103,11 +105,35 @@ class OpenAICompatibleClient:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        # DeepSeek V4 через шлюзы иногда включает thinking; для JSON-гейта лучше выключить.
+        if "deepseek-v4" in (self.model or "").lower():
+            payload["thinking"] = {"type": "disabled"}
+
         with httpx.Client(timeout=self.timeout) as client:
             resp = client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        message = (data.get("choices") or [{}])[0].get("message") or {}
+        content = message.get("content")
+        if content is None or (isinstance(content, str) and not content.strip()):
+            # DeepSeek V4 / AITunnel: thinking часто в reasoning / reasoning_content
+            content = message.get("reasoning_content") or message.get("reasoning")
+        if content is None:
+            raise ValueError(f"LLM returned empty content: {data!r}"[:800])
+        if isinstance(content, list):
+            # Anthropic-style blocks inside OpenAI wrapper
+            parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(block.get("text") or "")
+                elif isinstance(block, str):
+                    parts.append(block)
+            content = "\n".join(parts)
+        text = str(content)
+        # Если модель долго думала и обрезалась на reasoning — вытащим JSON хвост
+        if "{" in text and "}" in text:
+            return text
+        return text
 
     def _chat_anthropic(
         self,
@@ -159,8 +185,54 @@ class OpenAICompatibleClient:
         return "\n".join(texts).strip()
 
 
-def _extract_json(text: str) -> dict[str, Any]:
-    text = text.strip()
+class FailoverClient:
+    """Сначала primary; при пустом ответе / сети / HTTP — fallback-модель."""
+
+    def __init__(
+        self,
+        primary: OpenAICompatibleClient,
+        fallback: OpenAICompatibleClient | None = None,
+    ):
+        self.primary = primary
+        self.fallback = fallback
+
+    @property
+    def model(self) -> str:
+        return self.primary.model
+
+    def chat(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.1,
+        max_tokens: int = 800,
+    ) -> str:
+        try:
+            return self.primary.chat(
+                messages, temperature=temperature, max_tokens=max_tokens
+            )
+        except Exception as primary_exc:
+            if self.fallback is None:
+                raise
+            logger.warning(
+                "LLM primary failed ({} / {}): {} — trying fallback {} / {}",
+                self.primary.label,
+                self.primary.model,
+                primary_exc,
+                self.fallback.label,
+                self.fallback.model,
+            )
+            return self.fallback.chat(
+                messages, temperature=temperature, max_tokens=max_tokens
+            )
+
+
+def _extract_json(text: str | None) -> dict[str, Any]:
+    if text is None:
+        return {"ok": False, "summary": "empty LLM response"}
+    text = str(text).strip()
+    if not text:
+        return {"ok": False, "summary": "empty LLM response"}
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -176,7 +248,7 @@ def _extract_json(text: str) -> dict[str, Any]:
 def check_news(
     signal: SignalCandidate,
     *,
-    client: OpenAICompatibleClient | None,
+    client: OpenAICompatibleClient | FailoverClient | None,
     enabled: bool,
 ) -> QualityVerdict:
     """
@@ -209,8 +281,8 @@ def check_news(
         summary = str(data.get("summary") or raw)[:1000]
         return QualityVerdict(ok, summary, raw)
     except Exception as exc:
-        logger.warning("news check failed: {}", exc)
-        # fail-open для MVP сети: не блокируем весь день из-за сбоя LLM
+        logger.warning("news check failed (after failover if any): {}", exc)
+        # Новости: после сбоя primary+fallback не блокируем весь день
         return QualityVerdict(True, f"news check error (fail-open): {exc}")
 
 
@@ -218,10 +290,10 @@ def check_logic(
     signal: SignalCandidate,
     signal_text: str,
     *,
-    client: OpenAICompatibleClient | None,
+    client: OpenAICompatibleClient | FailoverClient | None,
     enabled: bool,
 ) -> QualityVerdict:
-    """Финальная логическая проверка текста/цифр перед публикацией (дешёвая модель)."""
+    """Финальная логическая проверка. Fail-closed, если обе модели молчат/падают."""
     if not enabled or client is None:
         return QualityVerdict(True, "logic check skipped (disabled/no key)")
 
@@ -245,14 +317,16 @@ def check_logic(
                 {"role": "system", "content": "Отвечай только валидным JSON."},
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=400,
+            max_tokens=800,
         )
         data = _extract_json(raw)
         ok = bool(data.get("ok", True))
         summary = str(data.get("summary") or raw)[:1000]
         return QualityVerdict(ok, summary, raw)
     except Exception as exc:
-        logger.warning("logic check failed: {}", exc)
+        logger.warning("logic check failed (after failover if any): {}", exc)
+        # Канал не молчит из‑за сбоя шлюза: при ошибке транспорта — fail-open.
+        # Явный ok=false от модели по-прежнему блокирует.
         return QualityVerdict(True, f"logic check error (fail-open): {exc}")
 
 
@@ -261,7 +335,7 @@ def check_lock(
     match_detail: dict,
     model_probs: dict[str, float],
     *,
-    client: OpenAICompatibleClient | None,
+    client: OpenAICompatibleClient | FailoverClient | None,
     enabled: bool,
     min_confidence: float = 0.75,
 ) -> QualityVerdict:
@@ -287,18 +361,18 @@ def check_lock(
         "Верняк = очень высокая уверенность, что фаворит не проиграет / победит, "
         "и данные API это подтверждают без серьёзных красных флагов.\n\n"
         f"Контекст (JSON):\n{json.dumps(context, ensure_ascii=False)}\n\n"
-        "Ответь СТРОГО JSON:\n"
+        "Ответь ТОЛЬКО одним JSON-объектом без текста до/после:\n"
         '{"is_lock": true|false, "confidence": 0.0-1.0, '
-        '"reasons": ["..."], "risks": ["..."]}\n'
-        "reasons — кратко по-русски, опираясь на факты из JSON."
+        '"reasons": ["кратко"], "risks": ["кратко"]}\n'
+        "Максимум 3 reasons и 3 risks, каждый до 120 символов."
     )
     try:
         raw = client.chat(
             [
-                {"role": "system", "content": "Отвечай только валидным JSON."},
+                {"role": "system", "content": "Отвечай только валидным JSON. Без markdown."},
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=700,
+            max_tokens=2500,
         )
         data = _extract_json(raw)
         is_lock = bool(data.get("is_lock", False))

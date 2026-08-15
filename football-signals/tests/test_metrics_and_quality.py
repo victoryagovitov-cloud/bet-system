@@ -1,7 +1,7 @@
 from datetime import date
 from unittest.mock import MagicMock
 
-from src.llm_quality import check_lock
+from src.llm_quality import FailoverClient, check_logic, check_lock
 from src.metrics import brier_score, compute_clv
 from src.llm_quality import _extract_json
 from src.signal_formatter import format_daily_digest, format_signal
@@ -122,8 +122,10 @@ def test_daily_digest_zero_signals():
         matches_in_whitelist=8,
         signals=[],
     )
-    assert "Сигналов сегодня нет" in text
+    assert "СВОДКА" in text
     assert "100" in text
+    assert "⚠️" in text
+    assert "P≥80%" in text or "P>=80%" in text
 
 
 def test_lock_prefilter_accepts_dominant_favorite():
@@ -271,3 +273,74 @@ def test_format_lock_signal():
     assert text.startswith("ВЕРНЯК")
     assert "Сильный H2H" in text
     assert "Edge:" not in text
+    assert "⚠️" in text
+    assert "Ставка:" in text
+
+
+def test_format_value_has_disclaimer_footer():
+    s = SignalCandidate(
+        match_id=2,
+        home_team="Home",
+        away_team="Away",
+        league_id=1,
+        league_name="L",
+        kickoff="2026-08-20",
+        outcome="dc_1x",
+        outcome_label="1X",
+        model_prob=0.84,
+        best_bookmaker="marathon",
+        best_odds=1.27,
+        edge=0.05,
+        stake_fraction=0.0333,
+        signal_kind="value",
+    )
+    text = format_signal(s, 30000)
+    assert text.startswith("VALUE")
+    assert "Edge: 5.0%" in text
+    assert "⚠️" in text
+    assert "────────" in text
+
+
+def test_failover_uses_backup_on_primary_fail():
+    primary = MagicMock()
+    primary.label = "p"
+    primary.model = "bad"
+    primary.chat.side_effect = ValueError("empty")
+    backup = MagicMock()
+    backup.label = "f"
+    backup.model = "good"
+    backup.chat.return_value = '{"ok": true, "summary": "ok"}'
+    client = FailoverClient(primary, backup)
+    out = client.chat([{"role": "user", "content": "hi"}])
+    assert "ok" in out
+    backup.chat.assert_called_once()
+
+
+def test_logic_fail_open_when_llm_dies():
+    """Сбой шлюза не должен обнулять канал; явный ok=false по-прежнему блокирует."""
+    signal = SignalCandidate(
+        match_id=1,
+        home_team="A",
+        away_team="B",
+        league_id=1,
+        league_name="L",
+        kickoff=None,
+        outcome="w1",
+        outcome_label="П1",
+        model_prob=0.85,
+        best_bookmaker="melbet",
+        best_odds=1.30,
+        edge=0.08,
+        stake_fraction=0.03,
+        signal_kind="value",
+    )
+    client = MagicMock()
+    client.chat.side_effect = ValueError("empty content")
+    v = check_logic(signal, "текст", client=client, enabled=True)
+    assert v.ok is True
+    assert "fail-open" in v.summary
+
+    client.chat.side_effect = None
+    client.chat.return_value = '{"ok": false, "summary": "edge подозрительный"}'
+    blocked = check_logic(signal, "текст", client=client, enabled=True)
+    assert blocked.ok is False

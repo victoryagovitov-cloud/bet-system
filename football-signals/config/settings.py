@@ -32,6 +32,7 @@ class Settings:
     max_channel_chat_id: str
     publish_mode: str
     min_model_probability: float
+    min_edge: float
     stake_hard_cap_fraction: float
     kelly_fraction_mode: str
     bankroll_amount: float
@@ -46,10 +47,16 @@ class Settings:
     news_llm_api_key: str
     news_llm_base_url: str
     news_llm_model: str
+    news_llm_fallback_api_key: str
+    news_llm_fallback_base_url: str
+    news_llm_fallback_model: str
     logic_llm_enabled: bool
     logic_llm_api_key: str
     logic_llm_base_url: str
     logic_llm_model: str
+    logic_llm_fallback_api_key: str
+    logic_llm_fallback_base_url: str
+    logic_llm_fallback_model: str
     # Lock («верняк») stream
     lock_signals_enabled: bool
     lock_min_model_probability: float
@@ -63,6 +70,9 @@ class Settings:
     lock_llm_api_key: str
     lock_llm_base_url: str
     lock_llm_model: str
+    lock_llm_fallback_api_key: str
+    lock_llm_fallback_base_url: str
+    lock_llm_fallback_model: str
 
 
 @lru_cache(maxsize=1)
@@ -73,6 +83,15 @@ def get_settings() -> Settings:
         abs_path = (ROOT / rel).resolve()
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         db_url = f"sqlite:///{abs_path.as_posix()}"
+
+    logic_key = os.getenv("LOGIC_LLM_API_KEY", "")
+    logic_base = os.getenv("LOGIC_LLM_BASE_URL", "https://api.aitunnel.ru/v1").rstrip("/")
+    logic_model = os.getenv("LOGIC_LLM_MODEL", "deepseek-chat")
+    logic_fb_key = os.getenv("LOGIC_LLM_FALLBACK_API_KEY", "")
+    logic_fb_base = (
+        os.getenv("LOGIC_LLM_FALLBACK_BASE_URL") or logic_base
+    ).rstrip("/")
+    logic_fb_model = os.getenv("LOGIC_LLM_FALLBACK_MODEL", "")
 
     return Settings(
         api_sport_base_url=os.getenv("API_SPORT_BASE_URL", "https://api.api-sport.ru").rstrip("/"),
@@ -85,6 +104,7 @@ def get_settings() -> Settings:
         max_channel_chat_id=os.getenv("MAX_CHANNEL_CHAT_ID", ""),
         publish_mode=os.getenv("PUBLISH_MODE", "dry_run").lower(),
         min_model_probability=float(os.getenv("MIN_MODEL_PROBABILITY", "0.80")),
+        min_edge=float(os.getenv("MIN_EDGE", "0.02")),
         stake_hard_cap_fraction=float(os.getenv("STAKE_HARD_CAP_FRACTION", "0.0333")),
         kelly_fraction_mode=os.getenv("KELLY_FRACTION_MODE", "quarter").lower(),
         bankroll_amount=float(os.getenv("BANKROLL_AMOUNT", "30000")),
@@ -99,12 +119,19 @@ def get_settings() -> Settings:
             "NEWS_LLM_BASE_URL", "https://api.perplexity.ai"
         ).rstrip("/"),
         news_llm_model=os.getenv("NEWS_LLM_MODEL", "sonar"),
-        logic_llm_enabled=_bool(os.getenv("LOGIC_LLM_ENABLED"), False),
-        logic_llm_api_key=os.getenv("LOGIC_LLM_API_KEY", ""),
-        logic_llm_base_url=os.getenv(
-            "LOGIC_LLM_BASE_URL", "https://api.aitunnel.ru/v1"
+        news_llm_fallback_api_key=os.getenv("NEWS_LLM_FALLBACK_API_KEY", ""),
+        news_llm_fallback_base_url=(
+            os.getenv("NEWS_LLM_FALLBACK_BASE_URL")
+            or os.getenv("NEWS_LLM_BASE_URL", "https://api.perplexity.ai")
         ).rstrip("/"),
-        logic_llm_model=os.getenv("LOGIC_LLM_MODEL", "deepseek-chat"),
+        news_llm_fallback_model=os.getenv("NEWS_LLM_FALLBACK_MODEL", ""),
+        logic_llm_enabled=_bool(os.getenv("LOGIC_LLM_ENABLED"), False),
+        logic_llm_api_key=logic_key,
+        logic_llm_base_url=logic_base,
+        logic_llm_model=logic_model,
+        logic_llm_fallback_api_key=logic_fb_key,
+        logic_llm_fallback_base_url=logic_fb_base,
+        logic_llm_fallback_model=logic_fb_model,
         lock_signals_enabled=_bool(os.getenv("LOCK_SIGNALS_ENABLED"), True),
         lock_min_model_probability=float(os.getenv("LOCK_MIN_MODEL_PROBABILITY", "0.78")),
         lock_odds_min=float(os.getenv("LOCK_ODDS_MIN", "1.12")),
@@ -115,14 +142,16 @@ def get_settings() -> Settings:
         lock_ai_min_confidence=float(os.getenv("LOCK_AI_MIN_CONFIDENCE", "0.75")),
         lock_stake_fraction=float(os.getenv("LOCK_STAKE_FRACTION", str(1.0 / 60.0))),
         # Default lock LLM = same as logic LLM
-        lock_llm_api_key=os.getenv("LOCK_LLM_API_KEY")
-        or os.getenv("LOGIC_LLM_API_KEY", ""),
+        lock_llm_api_key=os.getenv("LOCK_LLM_API_KEY") or logic_key,
         lock_llm_base_url=(
-            os.getenv("LOCK_LLM_BASE_URL")
-            or os.getenv("LOGIC_LLM_BASE_URL", "https://api.aitunnel.ru/v1")
+            os.getenv("LOCK_LLM_BASE_URL") or logic_base
         ).rstrip("/"),
-        lock_llm_model=os.getenv("LOCK_LLM_MODEL")
-        or os.getenv("LOGIC_LLM_MODEL", "deepseek-chat"),
+        lock_llm_model=os.getenv("LOCK_LLM_MODEL") or logic_model,
+        lock_llm_fallback_api_key=os.getenv("LOCK_LLM_FALLBACK_API_KEY") or logic_fb_key,
+        lock_llm_fallback_base_url=(
+            os.getenv("LOCK_LLM_FALLBACK_BASE_URL") or logic_fb_base
+        ).rstrip("/"),
+        lock_llm_fallback_model=os.getenv("LOCK_LLM_FALLBACK_MODEL") or logic_fb_model,
     )
 
 
