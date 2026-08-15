@@ -119,9 +119,8 @@ jobs:
           fi
 
       - name: Track / settle results
-        # Grades finished matches (win/loss/void), updates CLV/Brier snapshot.
-        # Runs after every 08/14/20 MSK pipeline so stats stay automatic.
-        run: python scripts/track_results.py
+        # Grades finished matches; publishes compact УЧЁТ to MAX when --publish.
+        run: python scripts/track_results.py --publish
         continue-on-error: true
 
       - name: Commit SQLite + calibration snapshot

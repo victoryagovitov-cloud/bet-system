@@ -82,9 +82,12 @@ Vars: `PUBLISH_MODE`, `LLM_QUALITY_ENABLED`, `NEWS_LLM_ENABLED`, `LOGIC_LLM_ENAB
 - подтягивает финальный счёт из API;
 - ставит WIN / LOSS / VOID (фора 0 при ничьей);
 - считает hit-rate, **Brier**, средний **CLV**, ROI по лигам;
-- пишет снимок в `data/calibration_latest.json` (коммитится вместе с `signals.db`).
+- пишет снимок в `data/calibration_latest.json`;
+- публикует в MAX мини-отчёт **УЧЁТ РЕЗУЛЬТАТОВ** (`--publish`).
 
-Вручную: `python scripts/track_results.py`.
+Вручную: `python scripts/track_results.py --publish`.
+
+Чеклист раз в 3 дня: [`docs/CHECKLIST_3DAYS.md`](docs/CHECKLIST_3DAYS.md).
 
 Аномальный разброс коэффициентов между 4 БК логируется (`ODDS_SPREAD_ANOMALY_THRESHOLD`).
 

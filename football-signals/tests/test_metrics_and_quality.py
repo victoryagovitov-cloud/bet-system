@@ -121,11 +121,52 @@ def test_daily_digest_zero_signals():
         matches_with_odds=100,
         matches_in_whitelist=8,
         signals=[],
+        pending_settlement=3,
     )
     assert "СВОДКА" in text
+    assert "Прогон: ok" in text
     assert "100" in text
+    assert "очереди учёта" in text
     assert "⚠️" in text
     assert "P≥80%" in text or "P>=80%" in text
+    assert "📌" in text
+
+
+def test_format_accounting_report():
+    from src.settlement import SettleSnapshot
+    from src.signal_formatter import format_accounting_report
+
+    empty = format_accounting_report(
+        SettleSnapshot(
+            settled_now=0,
+            pending=2,
+            n=0,
+            hit_rate=None,
+            mean_model_prob=None,
+            brier=None,
+            mean_clv=None,
+            by_league={},
+        )
+    )
+    assert empty.startswith("УЧЁТ РЕЗУЛЬТАТОВ")
+    assert "копится" in empty or "пустая" in empty
+
+    filled = format_accounting_report(
+        SettleSnapshot(
+            settled_now=1,
+            voids_now=0,
+            pending=4,
+            n=12,
+            hit_rate=0.75,
+            mean_model_prob=0.84,
+            brier=0.18,
+            mean_clv=0.01,
+            by_league={},
+        )
+    )
+    assert "Hit-rate" in filled
+    assert "CLV" in filled
+    assert "наблюдения" in filled
 
 
 def test_lock_prefilter_accepts_dominant_favorite():

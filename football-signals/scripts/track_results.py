@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -11,151 +12,34 @@ sys.path.insert(0, str(ROOT))
 from loguru import logger
 
 from config.settings import get_settings
-from src.api_sport_client import ApiSportClient, ApiSportError
-from src.db.repository import SignalRepository
-from src.metrics import calibration_report, compute_clv
-from src.value_engine import best_odds_across_bookmakers
-
-
-def _score_tuple(match: dict) -> tuple[int | None, int | None, str | None]:
-    hs = match.get("homeScore") or {}
-    as_ = match.get("awayScore") or {}
-    home = hs.get("current")
-    away = as_.get("current")
-    if home is None:
-        home = hs.get("display")
-    if away is None:
-        away = as_.get("display")
-    try:
-        home_i = int(home) if home is not None else None
-        away_i = int(away) if away is not None else None
-    except (TypeError, ValueError):
-        return None, None, None
-    if home_i is None or away_i is None:
-        return None, None, None
-    return home_i, away_i, f"{home_i}:{away_i}"
-
-
-def _won(outcome: str, home: int, away: int) -> bool | None:
-    if outcome == "w1":
-        return home > away
-    if outcome == "x":
-        return home == away
-    if outcome == "w2":
-        return home < away
-    if outcome == "dc_1x":
-        return home >= away
-    if outcome == "dc_x2":
-        return home <= away
-    if outcome == "dc_12":
-        return home != away
-    if outcome == "btts_yes":
-        return home > 0 and away > 0
-    if outcome == "btts_no":
-        return home == 0 or away == 0
-    if outcome == "total_over_25":
-        return (home + away) > 2.5
-    if outcome == "total_under_25":
-        return (home + away) < 2.5
-    if outcome == "dnb_1":
-        if home == away:
-            return None  # void / push — не считаем win/loss в MVP
-        return home > away
-    if outcome == "dnb_2":
-        if home == away:
-            return None
-        return away > home
-    return None
+from src import max_publisher, signal_formatter
+from src.settlement import settle_pending
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Settle finished signals + optional MAX status")
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help="Publish compact accounting status to MAX (or dry-run file)",
+    )
+    args = parser.parse_args()
+
     settings = get_settings()
-    repo = SignalRepository(settings.database_url)
-    rows = repo.unsettled()
-    settled = 0
-
-    with ApiSportClient(
-        settings.api_sport_base_url,
-        settings.api_sport_key,
-        settings.api_sport_sport_slug,
-    ) as client:
-        for row in rows:
-            try:
-                match = client.get_match_detail(row.match_id, settings.bookmakers_whitelist)
-            except ApiSportError as exc:
-                logger.warning("cannot fetch match {}: {}", row.match_id, exc)
-                continue
-
-            # Capture closing line while match is finished (or late prematch if already started)
-            closing_bk, closing_odds = best_odds_across_bookmakers(
-                match.get("oddsBk") or {},
-                settings.bookmakers_whitelist,
-                row.outcome,
-            )
-            clv = None
-            if closing_odds is not None:
-                clv = compute_clv(float(row.best_odds), float(closing_odds))
-
-            if match.get("status") != "finished":
-                # Optionally still store closing odds later; skip settle for now
-                continue
-
-            home, away, score = _score_tuple(match)
-            if home is None or away is None:
-                continue
-            won = _won(row.outcome, home, away)
-            # won is None for void/push (e.g. DNB on draw) or unknown market —
-            # still mark settled so the row does not stick in the queue forever.
-            if won is None and row.outcome not in {"dnb_1", "dnb_2"}:
-                logger.warning(
-                    "cannot grade outcome={} match={} score={}",
-                    row.outcome,
-                    row.match_id,
-                    score,
-                )
-                continue
-            grade = "VOID" if won is None else ("WIN" if won else "LOSS")
-            final = score if won is not None else f"{score} void"
-            repo.mark_settled(
-                row.id,
-                won,
-                final,
-                closing_odds=closing_odds,
-                closing_bookmaker=closing_bk,
-                clv=clv,
-            )
-            settled += 1
-            logger.info(
-                "settled #{} {} -> {} clv={}",
-                row.id,
-                final,
-                grade,
-                None if clv is None else round(clv, 4),
-            )
-
-    report = calibration_report(repo.settled_published())
-    payload = {
-        "settled_now": settled,
-        "n": report.n,
-        "hit_rate": report.hit_rate,
-        "mean_model_prob": report.mean_model_prob,
-        "brier": report.brier,
-        "mean_clv": report.mean_clv,
-        "by_league": {str(k): v for k, v in report.by_league.items()},
-    }
-    out = ROOT / "data" / "calibration_latest.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"settled_now={settled}")
+    snap = settle_pending(settings)
+    payload = snap.to_dict()
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    if report.n >= 20 and report.mean_model_prob and report.hit_rate is not None:
-        gap = report.mean_model_prob - report.hit_rate
-        if gap > 0.10:
-            logger.warning(
-                "calibration gap: model mean {:.0%} vs hit-rate {:.0%} — model may be overconfident",
-                report.mean_model_prob,
-                report.hit_rate,
-            )
+
+    if args.publish:
+        text = signal_formatter.format_accounting_report(snap)
+        ref = max_publisher.publish_signal(
+            text,
+            chat_id=settings.max_channel_chat_id,
+            token=settings.max_bot_token,
+            publish_mode=settings.publish_mode,
+            match_id=None,
+        )
+        logger.info("accounting report published ref={}", ref)
     return 0
 
 
