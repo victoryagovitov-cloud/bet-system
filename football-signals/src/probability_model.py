@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 from scipy.stats import poisson
 
+from src.lineup_context import extract_missing, lambda_penalties
 from src.season_strength import (
     TeamSeasonStats,
     estimate_lambdas_from_season,
@@ -180,6 +181,10 @@ def _estimate_lambdas(match: dict) -> tuple[float, float]:
     lambda_home += _form_attack_shift(form, "home") * form_scale
     lambda_away += _form_attack_shift(form, "away") * form_scale
 
+    miss_h, miss_a = lambda_penalties(extract_missing(match))
+    lambda_home += miss_h
+    lambda_away += miss_a
+
     lambda_home = float(np.clip(lambda_home, 0.35, 3.2))
     lambda_away = float(np.clip(lambda_away, 0.25, 3.0))
     return lambda_home, lambda_away
@@ -246,6 +251,7 @@ def compute(match: dict) -> dict[str, float]:
         is not None
     )
 
+    missing = extract_missing(match)
     return {
         "w1": p_home,
         "x": p_draw,
@@ -262,6 +268,8 @@ def compute(match: dict) -> dict[str, float]:
         "_lambda_home": lh,
         "_lambda_away": la,
         "_used_season_strength": 1.0 if used_season else 0.0,
+        "_missing_home": float(missing.home_count),
+        "_missing_away": float(missing.away_count),
     }
 
 

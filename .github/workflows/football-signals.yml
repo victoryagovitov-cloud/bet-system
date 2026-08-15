@@ -119,18 +119,21 @@ jobs:
           fi
 
       - name: Track / settle results
+        # Grades finished matches (win/loss/void), updates CLV/Brier snapshot.
+        # Runs after every 08/14/20 MSK pipeline so stats stay automatic.
         run: python scripts/track_results.py
         continue-on-error: true
 
-      - name: Commit SQLite state back to repo
+      - name: Commit SQLite + calibration snapshot
         working-directory: .
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p football-signals/data
           git add -f football-signals/data/signals.db || true
+          git add -f football-signals/data/calibration_latest.json || true
           if git diff --staged --quiet; then
-            echo "No DB changes to commit"
+            echo "No stats changes to commit"
           else
             git commit -m "chore: update signals.db after scheduled run"
             git push

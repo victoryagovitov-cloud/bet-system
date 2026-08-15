@@ -78,7 +78,15 @@ Vars: `PUBLISH_MODE`, `LLM_QUALITY_ENABLED`, `NEWS_LLM_ENABLED`, `LOGIC_LLM_ENAB
 
 ## Метрики
 
-`track_results.py` считает hit-rate, **Brier score**, средний **CLV**, ROI/hit-rate **по лигам**. Аномальный разброс коэффициентов между 4 БК логируется (`ODDS_SPREAD_ANOMALY_THRESHOLD`).
+`track_results.py` после каждого GitHub Actions прогона (08/14/20 МСК) автоматически:
+- подтягивает финальный счёт из API;
+- ставит WIN / LOSS / VOID (фора 0 при ничьей);
+- считает hit-rate, **Brier**, средний **CLV**, ROI по лигам;
+- пишет снимок в `data/calibration_latest.json` (коммитится вместе с `signals.db`).
+
+Вручную: `python scripts/track_results.py`.
+
+Аномальный разброс коэффициентов между 4 БК логируется (`ODDS_SPREAD_ANOMALY_THRESHOLD`).
 
 ## Тесты
 

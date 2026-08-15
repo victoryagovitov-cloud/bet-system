@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from loguru import logger
+
+from src.lineup_context import blocks_outcome, extract_missing
 
 # Markets allowed as «верняк» candidates (favorite win / not lose).
 LOCK_OUTCOMES = frozenset({"w1", "w2", "dnb_1", "dnb_2", "dc_1x", "dc_x2"})
@@ -174,6 +177,7 @@ def find_signal(
     """
     odds_bk = match.get("oddsBk") or {}
     candidates: list[SignalCandidate] = []
+    missing = extract_missing(match)
 
     tournament = match.get("tournament") or {}
     league_id = int(tournament.get("id") or 0)
@@ -185,6 +189,15 @@ def find_signal(
         if outcome not in OUTCOME_MARKET_MAP:
             continue
         if model_prob < min_model_probability:
+            continue
+        block_reason = blocks_outcome(outcome, missing)
+        if block_reason:
+            logger.info(
+                "skip value outcome={} match={} ({})",
+                outcome,
+                match.get("id"),
+                block_reason,
+            )
             continue
         best_bk, best_odds = best_odds_across_bookmakers(odds_bk, bookmaker_ids, outcome)
         if best_bk is None or best_odds is None or best_odds <= 1.0:
@@ -282,6 +295,7 @@ def find_lock_candidate(
     """
     odds_bk = match.get("oddsBk") or {}
     candidates: list[SignalCandidate] = []
+    missing = extract_missing(match)
 
     tournament = match.get("tournament") or {}
     league_id = int(tournament.get("id") or 0)
@@ -290,6 +304,15 @@ def find_lock_candidate(
     for outcome in LOCK_OUTCOMES:
         model_prob = model_probs.get(outcome)
         if model_prob is None or model_prob < min_model_probability:
+            continue
+        block_reason = blocks_outcome(outcome, missing)
+        if block_reason:
+            logger.info(
+                "skip lock outcome={} match={} ({})",
+                outcome,
+                match.get("id"),
+                block_reason,
+            )
             continue
         if not _dominance_ok(
             match,

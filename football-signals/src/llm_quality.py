@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
+from src.lineup_context import extract_missing
 from src.value_engine import SignalCandidate
 
 
@@ -48,6 +49,7 @@ def _compact_match_context(match: dict, model_probs: dict[str, float], signal: S
         "pregame_h2h": (pregame.get("h2h") or {}).get("teamDuel"),
         "pregame_streaks": (pregame.get("teamStreaks") or {}).get("general"),
         "pregame_form": pregame.get("form"),
+        "missing_players": extract_missing(match).compact(),
         "tournament": (match.get("tournament") or {}).get("name"),
         "round": match.get("roundInfo"),
     }

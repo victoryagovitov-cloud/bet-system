@@ -96,7 +96,7 @@ class SignalRepository:
         with self._Session() as session:
             rows = session.scalars(
                 select(SignalRow).where(
-                    SignalRow.result_win.is_(None),
+                    SignalRow.settled_at.is_(None),
                     SignalRow.status == "published",
                 )
             ).all()
@@ -107,13 +107,14 @@ class SignalRepository:
     def mark_settled(
         self,
         signal_id: int,
-        won: bool,
+        won: bool | None,
         final_score: str | None,
         *,
         closing_odds: float | None = None,
         closing_bookmaker: str | None = None,
         clv: float | None = None,
     ) -> None:
+        """won=True/False for graded bets; won=None for void/push (e.g. DNB draw)."""
         with self._Session() as session:
             row = session.get(SignalRow, signal_id)
             if not row:

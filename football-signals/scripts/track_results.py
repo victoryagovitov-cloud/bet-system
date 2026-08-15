@@ -104,12 +104,22 @@ def main() -> int:
             if home is None or away is None:
                 continue
             won = _won(row.outcome, home, away)
-            if won is None:
+            # won is None for void/push (e.g. DNB on draw) or unknown market —
+            # still mark settled so the row does not stick in the queue forever.
+            if won is None and row.outcome not in {"dnb_1", "dnb_2"}:
+                logger.warning(
+                    "cannot grade outcome={} match={} score={}",
+                    row.outcome,
+                    row.match_id,
+                    score,
+                )
                 continue
+            grade = "VOID" if won is None else ("WIN" if won else "LOSS")
+            final = score if won is not None else f"{score} void"
             repo.mark_settled(
                 row.id,
                 won,
-                score,
+                final,
                 closing_odds=closing_odds,
                 closing_bookmaker=closing_bk,
                 clv=clv,
@@ -118,29 +128,26 @@ def main() -> int:
             logger.info(
                 "settled #{} {} -> {} clv={}",
                 row.id,
-                score,
-                "WIN" if won else "LOSS",
+                final,
+                grade,
                 None if clv is None else round(clv, 4),
             )
 
     report = calibration_report(repo.settled_published())
+    payload = {
+        "settled_now": settled,
+        "n": report.n,
+        "hit_rate": report.hit_rate,
+        "mean_model_prob": report.mean_model_prob,
+        "brier": report.brier,
+        "mean_clv": report.mean_clv,
+        "by_league": {str(k): v for k, v in report.by_league.items()},
+    }
+    out = ROOT / "data" / "calibration_latest.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"settled_now={settled}")
-    print(
-        json.dumps(
-            {
-                "n": report.n,
-                "hit_rate": report.hit_rate,
-                "mean_model_prob": report.mean_model_prob,
-                "brier": report.brier,
-                "mean_clv": report.mean_clv,
-                "by_league": {
-                    str(k): v for k, v in report.by_league.items()
-                },
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     if report.n >= 20 and report.mean_model_prob and report.hit_rate is not None:
         gap = report.mean_model_prob - report.hit_rate
         if gap > 0.10:

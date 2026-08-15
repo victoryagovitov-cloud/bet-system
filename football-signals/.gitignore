@@ -7,6 +7,7 @@ __pycache__/
 .mypy_cache/
 data/*.db
 !data/signals.db
+!data/calibration_latest.json
 data/signals_dry_run/
 *.log
 .DS_Store
