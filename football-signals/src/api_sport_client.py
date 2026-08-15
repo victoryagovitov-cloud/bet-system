@@ -153,3 +153,18 @@ class ApiSportClient:
             "GET",
             f"/v2/{self.sport_slug}/tournament/{tournament_id}/seasons",
         )
+
+    def get_tournament_standings(self, tournament_id: int) -> dict:
+        """
+        GET /v2/{sport}/tournament/{id}/standings
+        Таблица сезона: scoresFor / scoresAgainst / matches / points.
+        """
+        payload = self._request(
+            "GET",
+            f"/v2/{self.sport_slug}/tournament/{tournament_id}/standings",
+            params={"locale": "ru"},
+        )
+        if not isinstance(payload, dict):
+            raise ApiSportError(f"Unexpected standings payload: {type(payload)}")
+        return payload
+

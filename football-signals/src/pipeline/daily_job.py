@@ -22,6 +22,8 @@ from src import (
     stake_engine,
     value_engine,
 )
+from src.season_strength import attach_season_stats, index_standings
+
 
 
 def _news_client(settings):
@@ -281,8 +283,26 @@ def run_daily_pipeline(
     matches_with_odds = 0
     matches_in_whitelist = 0
     label = ",".join(d.isoformat() for d in dates)
+    standings_cache: dict[int, dict] = {}
 
     logger.info("pipeline start dates={} bookmakers={}", label, bookmakers)
+
+    def _season_index_for(tournament_id: int | None) -> dict:
+        if not tournament_id:
+            return {}
+        tid = int(tournament_id)
+        if tid not in standings_cache:
+            try:
+                standings_cache[tid] = client.get_tournament_standings(tid)
+                logger.info(
+                    "standings loaded tournament={} teams~={}",
+                    tid,
+                    len(index_standings(standings_cache[tid])),
+                )
+            except ApiSportError as exc:
+                logger.warning("standings unavailable tournament={}: {}", tid, exc)
+                standings_cache[tid] = {}
+        return index_standings(standings_cache.get(tid) or {})
 
     with ApiSportClient(
         settings.api_sport_base_url,
@@ -319,6 +339,10 @@ def run_daily_pipeline(
                     logger.warning("skip match {}: {}", match_id, exc)
                     continue
 
+                tid = ((detail.get("tournament") or {}).get("id")) or (
+                    (m.get("tournament") or {}).get("id")
+                )
+                attach_season_stats(detail, _season_index_for(tid))
                 model_probs = probability_model.compute(detail)
 
                 # 1) VALUE first

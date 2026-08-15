@@ -14,6 +14,7 @@ from config.settings import get_settings, load_leagues_whitelist
 from src.api_sport_client import ApiSportClient, ApiSportError
 from src.league_filter import is_league_allowed
 from src import probability_model, value_engine
+from src.season_strength import attach_season_stats, index_standings
 
 
 def main() -> int:
@@ -24,12 +25,25 @@ def main() -> int:
     start = date.today()
     days = int(sys.argv[1]) if len(sys.argv) > 1 else 8
     out: list[dict] = []
+    standings_cache: dict[int, dict] = {}
 
     with ApiSportClient(
         settings.api_sport_base_url,
         settings.api_sport_key,
         settings.api_sport_sport_slug,
     ) as client:
+
+        def season_for(tid: int | None) -> dict:
+            if not tid:
+                return {}
+            tid = int(tid)
+            if tid not in standings_cache:
+                try:
+                    standings_cache[tid] = client.get_tournament_standings(tid)
+                except ApiSportError:
+                    standings_cache[tid] = {}
+            return index_standings(standings_cache.get(tid) or {})
+
         for offset in range(days):
             target = start + timedelta(days=offset)
             try:
@@ -54,6 +68,10 @@ def main() -> int:
                 except ApiSportError as exc:
                     print(f"  skip {mid}: {exc}", flush=True)
                     continue
+                tid = ((detail.get("tournament") or {}).get("id")) or (
+                    (m.get("tournament") or {}).get("id")
+                )
+                attach_season_stats(detail, season_for(tid))
                 probs = probability_model.compute(detail)
                 value = value_engine.find_signal(
                     detail,
