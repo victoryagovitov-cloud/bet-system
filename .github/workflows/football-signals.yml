@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       date:
-        description: "YYYY-MM-DD (optional; default tomorrow MSK)"
+        description: "YYYY-MM-DD (optional; default today+tomorrow MSK)"
         required: false
         default: ""
 
@@ -37,7 +37,7 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Write .env from secrets
+      - name: Write .env from secrets/vars
         env:
           API_SPORT_KEY: ${{ secrets.API_SPORT_KEY }}
           MAX_BOT_TOKEN: ${{ secrets.MAX_BOT_TOKEN }}
@@ -49,36 +49,64 @@ jobs:
           LLM_QUALITY_ENABLED: ${{ vars.LLM_QUALITY_ENABLED }}
           NEWS_LLM_ENABLED: ${{ vars.NEWS_LLM_ENABLED }}
           LOGIC_LLM_ENABLED: ${{ vars.LOGIC_LLM_ENABLED }}
+          LOCK_SIGNALS_ENABLED: ${{ vars.LOCK_SIGNALS_ENABLED }}
+          LOGIC_LLM_MODEL: ${{ vars.LOGIC_LLM_MODEL }}
+          LOGIC_LLM_FALLBACK_MODEL: ${{ vars.LOGIC_LLM_FALLBACK_MODEL }}
+          NEWS_LLM_MODEL: ${{ vars.NEWS_LLM_MODEL }}
+          MIN_EDGE: ${{ vars.MIN_EDGE }}
         run: |
           python - <<'PY'
           import os
           from pathlib import Path
+
+          def g(key: str, default: str = "") -> str:
+              return (os.environ.get(key) or default).strip()
+
+          logic_key = g("LOGIC_LLM_API_KEY")
           lines = {
               "API_SPORT_BASE_URL": "https://api.api-sport.ru",
-              "API_SPORT_KEY": os.environ.get("API_SPORT_KEY", ""),
+              "API_SPORT_KEY": g("API_SPORT_KEY"),
               "API_SPORT_SPORT_SLUG": "football",
               "BOOKMAKERS_WHITELIST": "marathon,melbet,betboom,pari",
-              "MAX_BOT_TOKEN": os.environ.get("MAX_BOT_TOKEN", ""),
-              "MAX_CHANNEL_CHAT_ID": os.environ.get("MAX_CHANNEL_CHAT_ID", ""),
-              "PUBLISH_MODE": os.environ.get("PUBLISH_MODE") or "dry_run",
+              "MAX_BOT_TOKEN": g("MAX_BOT_TOKEN"),
+              "MAX_CHANNEL_CHAT_ID": g("MAX_CHANNEL_CHAT_ID"),
+              "PUBLISH_MODE": g("PUBLISH_MODE", "dry_run"),
               "MIN_MODEL_PROBABILITY": "0.80",
+              "MIN_EDGE": g("MIN_EDGE", "0.02"),
               "STAKE_HARD_CAP_FRACTION": "0.0333",
               "KELLY_FRACTION_MODE": "quarter",
-              "BANKROLL_AMOUNT": os.environ.get("BANKROLL_AMOUNT") or "30000",
+              "BANKROLL_AMOUNT": g("BANKROLL_AMOUNT", "30000"),
               "TIMEZONE": "Europe/Moscow",
               "DATABASE_URL": "sqlite:///data/signals.db",
-              "LLM_QUALITY_ENABLED": os.environ.get("LLM_QUALITY_ENABLED") or "false",
-              "NEWS_LLM_ENABLED": os.environ.get("NEWS_LLM_ENABLED") or "false",
-              "NEWS_LLM_API_KEY": os.environ.get("NEWS_LLM_API_KEY", ""),
-              "NEWS_LLM_BASE_URL": "https://api.perplexity.ai",
-              "NEWS_LLM_MODEL": "sonar",
-              "LOGIC_LLM_ENABLED": os.environ.get("LOGIC_LLM_ENABLED") or "false",
-              "LOGIC_LLM_API_KEY": os.environ.get("LOGIC_LLM_API_KEY", ""),
-              "LOGIC_LLM_BASE_URL": "https://api.aitunnel.ru/v1",
-              "LOGIC_LLM_MODEL": "deepseek-chat",
               "ODDS_SPREAD_ANOMALY_THRESHOLD": "0.80",
+              "LLM_QUALITY_ENABLED": g("LLM_QUALITY_ENABLED", "false"),
+              "NEWS_LLM_ENABLED": g("NEWS_LLM_ENABLED", "false"),
+              "NEWS_LLM_API_KEY": g("NEWS_LLM_API_KEY"),
+              "NEWS_LLM_BASE_URL": "https://api.perplexity.ai",
+              "NEWS_LLM_MODEL": g("NEWS_LLM_MODEL", "sonar-pro"),
+              "LOGIC_LLM_ENABLED": g("LOGIC_LLM_ENABLED", "false"),
+              "LOGIC_LLM_API_KEY": logic_key,
+              "LOGIC_LLM_BASE_URL": "https://api.aitunnel.ru/v1",
+              "LOGIC_LLM_MODEL": g("LOGIC_LLM_MODEL", "deepseek-v4-pro"),
+              # Резерв: та же сеть/ключ, более стабильная «обычная» модель
+              "LOGIC_LLM_FALLBACK_API_KEY": logic_key,
+              "LOGIC_LLM_FALLBACK_BASE_URL": "https://api.aitunnel.ru/v1",
+              "LOGIC_LLM_FALLBACK_MODEL": g("LOGIC_LLM_FALLBACK_MODEL", "deepseek-chat"),
+              "LOCK_SIGNALS_ENABLED": g("LOCK_SIGNALS_ENABLED", "true"),
+              "LOCK_MIN_MODEL_PROBABILITY": "0.78",
+              "LOCK_ODDS_MIN": "1.12",
+              "LOCK_ODDS_MAX": "1.45",
+              "LOCK_LLM_API_KEY": logic_key,
+              "LOCK_LLM_BASE_URL": "https://api.aitunnel.ru/v1",
+              "LOCK_LLM_MODEL": g("LOGIC_LLM_MODEL", "deepseek-v4-pro"),
+              "LOCK_LLM_FALLBACK_API_KEY": logic_key,
+              "LOCK_LLM_FALLBACK_BASE_URL": "https://api.aitunnel.ru/v1",
+              "LOCK_LLM_FALLBACK_MODEL": g("LOGIC_LLM_FALLBACK_MODEL", "deepseek-chat"),
           }
-          Path(".env").write_text("\n".join(f"{k}={v}" for k, v in lines.items()) + "\n", encoding="utf-8")
+          Path(".env").write_text(
+              "\n".join(f"{k}={v}" for k, v in lines.items()) + "\n",
+              encoding="utf-8",
+          )
           print("wrote .env keys:", ", ".join(lines))
           PY
 
