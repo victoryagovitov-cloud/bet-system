@@ -1,8 +1,0 @@
-﻿Name=TrueLiveBet_Scheduler.lnk
-OriginalPath=C:\Users\Мария\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\TrueLiveBet_Scheduler.lnk
-TargetPath=D:\cursor\!Backtothestart\start_daily_scheduler.bat
-Arguments=
-WorkingDirectory=D:\cursor\!Backtothestart
-Description=РџР»Р°РЅРёСЂРѕРІС‰РёРє РїСЂРѕРіРЅРѕР·РѕРІ TrueLiveBet - 13:00 РњРЎРљ
-DisabledAt=2026-08-03T23:32:54.9089690+03:00
-RestoreCommand=Copy-Item -LiteralPath 'D:\cursor\Backtothestart\AUDIT_REWRITE\_autostart_backup\20260803_233254\TrueLiveBet_Scheduler.lnk' -Destination 'C:\Users\Мария\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\TrueLiveBet_Scheduler.lnk'

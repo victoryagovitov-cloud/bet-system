@@ -1,70 +1,21 @@
-# TrueLiveBet - Система анализа лайв-ставок
+# bet-system — «Честная ставка»
 
-Автоматическая система анализа лайв-матчей для Telegram канала @TrueLiveBet.
+Автопрогон футбольных сигналов: API-SPORT → модель → MAX.
 
-## 🎯 Основные возможности
+Рабочий код только в папке [`football-signals/`](football-signals/).
 
-- **Автоматический анализ** лайв-матчей (футбол, теннис, гандбол)
-- **Фильтрация** по статистическим критериям (доминирование, преимущество)
-- **Дедупликация** рекомендаций
-- **Автоматическая отправка** в Telegram канал
-- **Планировщик** с расписанием каждые 45 минут
+Расписание GitHub Actions (МСК): 08:00 / 14:00 / 20:00 — workflow  
+[`.github/workflows/football-signals.yml`](.github/workflows/football-signals.yml).
 
-## 📁 Структура проекта
+Локально:
 
-### Основные модули
-
-- `generate_live_report.py` - генерация отчетов и форматирование сообщений
-- `graphql_live_analyzer.py` - анализ футбольных матчей
-- `graphql_tennis_analyzer.py` - анализ теннисных матчей
-- `graphql_handball_analyzer.py` - анализ гандбольных матчей
-- `scores24_graphql_client.py` - клиент для работы с Scores24 API
-- `scores24_snapshot_enricher.py` - обогащение данных через Browser MCP
-- `send_live_report.py` - отправка отчетов в Telegram
-- `auto_cycle_scheduler.py` - планировщик автоматических запусков
-- `recommendation_logger.py` - логирование рекомендаций
-
-### Конфигурация
-
-- `config.json` - основные настройки системы
-- `.gitignore` - исключения для git
-
-## 🚀 Быстрый старт
-
-1. Установите зависимости:
 ```bash
+cd football-signals
+python -m venv .venv
+# Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+copy .env.example .env   # заполнить ключи
+python scripts/run_daily.py
 ```
 
-2. Настройте конфигурацию:
-- Создайте `config.local.json` с вашими токенами (не коммитится в git)
-
-3. Запустите планировщик:
-```bash
-python auto_cycle_scheduler.py --max-matches 5
-```
-
-## 📊 Алгоритм работы
-
-Подробное описание алгоритма в файле `ПОЛНЫЙ_АЛГОРИТМ_РАБОТЫ.md`
-
-## ⚙️ Технические детали
-
-- **Источник данных**: Scores24.live (GraphQL API)
-- **Обогащение**: Browser MCP для получения минут и сетов
-- **Фильтрация**: Молодежные турниры, товарищеские матчи, любительские лиги
-- **Критерии отбора**: Доминирование по статистике, неничейный счет, минимальная минута
-
-## 📝 Логирование
-
-- Логи планировщика: `logs/auto_cycle.log`
-- История рекомендаций: `data/recommendations_log.csv`
-
-## 🔒 Безопасность
-
-- Токены и конфиденциальные данные в `.env` или `config.local.json` (не коммитятся)
-- `.gitignore` настроен для исключения чувствительных данных
-
-## 📄 Лицензия
-
-Приватный проект
+Secrets/Variables — в настройках репозитория GitHub (см. `football-signals/README.md`).
