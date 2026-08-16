@@ -96,6 +96,20 @@ Vars: `PUBLISH_MODE`, `LLM_QUALITY_ENABLED`, `NEWS_LLM_ENABLED`, `LOGIC_LLM_ENAB
 
 Аномальный разброс коэффициентов между 4 БК логируется (`ODDS_SPREAD_ANOMALY_THRESHOLD`).
 
+## Live-скан (ручной, без публикации)
+
+Вечерний sandbox: смотрит `inprogress`, парсит `matchStatistics` (xG / удары / владение), масштабирует прематч-λ на остаток матча и ищет value по live-кэфам RU-БК. **В канал не публикует** — только терминал + JSON.
+
+```bash
+python scripts/run_live_scan.py
+python scripts/run_live_scan.py --max 2 --min-edge 0.05
+python scripts/run_live_scan.py --watch 45
+python scripts/run_live_scan.py --reset-session
+python scripts/run_live_scan.py --all-leagues --no-session
+```
+
+Сессия вечера: `data/_live_session.json` (дедуп матчей + потолок `--max`). Последний скан: `data/_live_scan_latest.json`.
+
 ## Тесты
 
 ```bash
