@@ -107,7 +107,7 @@ def get_settings() -> Settings:
         publish_mode=os.getenv("PUBLISH_MODE", "dry_run").lower(),
         min_model_probability=float(os.getenv("MIN_MODEL_PROBABILITY", "0.80")),
         min_edge=float(os.getenv("MIN_EDGE", "0.02")),
-        max_edge=float(os.getenv("MAX_EDGE", "0.12")),
+        max_edge=float(os.getenv("MAX_EDGE", "0.15")),
         max_value_signals_per_run=int(os.getenv("MAX_VALUE_SIGNALS_PER_RUN", "5")),
         stake_hard_cap_fraction=float(os.getenv("STAKE_HARD_CAP_FRACTION", "0.0333")),
         kelly_fraction_mode=os.getenv("KELLY_FRACTION_MODE", "quarter").lower(),

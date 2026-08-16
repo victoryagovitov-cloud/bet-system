@@ -200,6 +200,7 @@ def _try_publish(
             enabled=settings.llm_quality_enabled and settings.logic_llm_enabled,
             match_detail=detail,
             bookmakers=bookmakers,
+            model_probs=model_probs,
             max_edge=settings.max_edge,
         )
         if not logic.ok:

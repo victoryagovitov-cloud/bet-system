@@ -405,10 +405,34 @@ def test_logic_hard_blocks_fat_edge_without_llm():
         signal_kind="value",
     )
     client = MagicMock()
-    v = check_logic(signal, "VALUE…", client=client, enabled=True, max_edge=0.12)
+    v = check_logic(signal, "VALUE…", client=client, enabled=True, max_edge=0.15)
     assert v.ok is False
     assert "жирный" in v.summary or "max" in v.summary
     client.chat.assert_not_called()
+
+
+def test_logic_allows_edge_between_12_and_15_to_reach_llm():
+    signal = SignalCandidate(
+        match_id=1,
+        home_team="A",
+        away_team="B",
+        league_id=1,
+        league_name="L",
+        kickoff=None,
+        outcome="w1",
+        outcome_label="П1",
+        model_prob=0.88,
+        best_bookmaker="melbet",
+        best_odds=1.35,
+        edge=0.14,
+        stake_fraction=0.0333,
+        signal_kind="value",
+    )
+    client = MagicMock()
+    client.chat.return_value = '{"ok": true, "summary": "умеренный edge"}'
+    v = check_logic(signal, "VALUE…", client=client, enabled=True, max_edge=0.15)
+    assert v.ok is True
+    client.chat.assert_called_once()
 
 
 def test_logic_missing_ok_field_is_block():

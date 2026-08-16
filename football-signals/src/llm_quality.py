@@ -22,6 +22,50 @@ class QualityVerdict:
     risks: list[str] | None = None
 
 
+def _season_context(match: dict, model_probs: dict[str, float]) -> dict[str, Any]:
+    """Compact season-table strength for LLM judges."""
+    from src.season_strength import team_id_from_match
+
+    by_team = match.get("_season_by_team") or {}
+    used = bool(model_probs.get("_used_season_strength"))
+
+    def pack(side: str) -> dict[str, Any] | None:
+        tid = team_id_from_match(match, side)
+        if tid is None:
+            return None
+        st = by_team.get(int(tid))
+        if st is None:
+            return {"team_id": tid, "in_table": False}
+        return {
+            "team_id": tid,
+            "in_table": True,
+            "position": st.position,
+            "matches": st.matches,
+            "points": st.points,
+            "gf_pg": round(st.gf_pg, 3),
+            "ga_pg": round(st.ga_pg, 3),
+        }
+
+    home = pack("home")
+    away = pack("away")
+    gap = None
+    if (
+        isinstance(home, dict)
+        and isinstance(away, dict)
+        and home.get("position") is not None
+        and away.get("position") is not None
+    ):
+        gap = int(away["position"]) - int(home["position"])
+    return {
+        "used_in_model": used,
+        "lambda_home": model_probs.get("_lambda_home"),
+        "lambda_away": model_probs.get("_lambda_away"),
+        "home": home,
+        "away": away,
+        "home_minus_away_position": gap,  # >0 ⇒ home выше в таблице
+    }
+
+
 def _compact_match_context(match: dict, model_probs: dict[str, float], signal: SignalCandidate) -> dict[str, Any]:
     """Shrink API match detail for the lock judge prompt."""
     pregame = match.get("pregame") or {}
@@ -46,6 +90,7 @@ def _compact_match_context(match: dict, model_probs: dict[str, float], signal: S
         "lambda_home": model_probs.get("_lambda_home"),
         "lambda_away": model_probs.get("_lambda_away"),
         "model_probs": probs_public,
+        "season_strength": _season_context(match, model_probs),
         "pregame_h2h": (pregame.get("h2h") or {}).get("teamDuel"),
         "pregame_streaks": (pregame.get("teamStreaks") or {}).get("general"),
         "pregame_form": pregame.get("form"),
@@ -53,6 +98,7 @@ def _compact_match_context(match: dict, model_probs: dict[str, float], signal: S
         "tournament": (match.get("tournament") or {}).get("name"),
         "round": match.get("roundInfo"),
     }
+
 
 
 class OpenAICompatibleClient:
@@ -316,7 +362,8 @@ def check_logic(
     enabled: bool,
     match_detail: dict | None = None,
     bookmakers: list[str] | None = None,
-    max_edge: float = 0.12,
+    model_probs: dict[str, float] | None = None,
+    max_edge: float = 0.15,
 ) -> QualityVerdict:
     """
     Стоп-кран для VALUE перед публикацией.
@@ -385,6 +432,7 @@ def check_logic(
         f"edge={edge:.4f} ({edge:.1%})\n"
         f"stake_fraction={signal.stake_fraction:.4f}\n"
         f"max_edge_allowed={max_edge}\n"
+        f"сила_сезона: {json.dumps(_season_context(match_detail or {}, model_probs or {}), ensure_ascii=False)}\n"
         f"рынок (лучшие кэфы RU-БК): {json.dumps(market_odds, ensure_ascii=False)}\n\n"
         f"Текст поста:\n{signal_text}\n\n"
         "Ответь СТРОГО JSON: {\"ok\": true|false, \"summary\": \"кратко по-русски почему\"}."
@@ -444,12 +492,23 @@ def check_lock(
 
     context = _compact_match_context(match_detail, model_probs, signal)
     prompt = (
-        "Ты спортивный аналитик. Нужно решить, является ли исход «верняком» "
-        "(явный безоговорочный фаворит по совокупности данных), а НЕ value-ставкой.\n"
-        "Низкий коэффициент букмекера САМ ПО СЕБЕ НЕ делает исход верняком.\n"
-        "Смотри h2h, streaks/form, λ модели, полный набор вероятностей, согласованность линии.\n"
-        "Верняк = очень высокая уверенность, что фаворит не проиграет / победит, "
-        "и данные API это подтверждают без серьёзных красных флагов.\n\n"
+        "Ты судья «верняка» для канала «Честная ставка».\n"
+        "Верняк ≠ value. Низкий кэф сам по себе НЕ делает верняк.\n\n"
+        "Верняк = явный фаворит, который заметно сильнее соперника «на голову», "
+        "а не просто «неплохо смотрится».\n"
+        "Хорошие признаки (нужно несколько сразу):\n"
+        "- сила сезона / таблица: фаворит из верхней части, оппонент заметно ниже "
+        "(большой разрыв позиций/очков), либо явный разрыв λ атаки/защиты;\n"
+        "- форма/streaks не противоречат фавориту;\n"
+        "- h2h может усиливать, но один h2h без сезона — мало;\n"
+        "- нет серьёзных missingPlayers у фаворита;\n"
+        "- линия БК в целом согласна, что это фаворит.\n\n"
+        "НЕ верняк, если:\n"
+        "- середняк vs середняк / равные по таблице;\n"
+        "- только «неплохая форма» без явного превосходства;\n"
+        "- модель и рынок смотрят в разные стороны;\n"
+        "- много красных флагов (травмы ключа, провал формы).\n\n"
+        "Слова «безоговорочный» не требуются — нужна ясная иерархия сил, не идеальная гарантия.\n\n"
         f"Контекст (JSON):\n{json.dumps(context, ensure_ascii=False)}\n\n"
         "Ответь ТОЛЬКО одним JSON-объектом без текста до/после:\n"
         '{"is_lock": true|false, "confidence": 0.0-1.0, '

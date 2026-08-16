@@ -75,7 +75,7 @@ jobs:
               "PUBLISH_MODE": g("PUBLISH_MODE", "dry_run"),
               "MIN_MODEL_PROBABILITY": "0.80",
               "MIN_EDGE": g("MIN_EDGE", "0.02"),
-              "MAX_EDGE": g("MAX_EDGE", "0.12"),
+              "MAX_EDGE": g("MAX_EDGE", "0.15"),
               "MAX_VALUE_SIGNALS_PER_RUN": g("MAX_VALUE_SIGNALS_PER_RUN", "5"),
               "STAKE_HARD_CAP_FRACTION": "0.0333",
               "KELLY_FRACTION_MODE": "quarter",

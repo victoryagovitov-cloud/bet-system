@@ -49,7 +49,7 @@ def test_rejects_edge_above_max():
         "_lambda_home": 2.0,
         "_lambda_away": 0.8,
     }
-    assert find_signal(match, probs, ["melbet"], 0.80, min_edge=0.02, max_edge=0.12) is None
+    assert find_signal(match, probs, ["melbet"], 0.80, min_edge=0.02, max_edge=0.15) is None
 
 
 def test_accepts_aligned_moderate_edge():
@@ -67,10 +67,10 @@ def test_accepts_aligned_moderate_edge():
         "_lambda_home": 2.0,
         "_lambda_away": 0.9,
     }
-    sig = find_signal(match, probs, ["melbet"], 0.80, min_edge=0.02, max_edge=0.12)
+    sig = find_signal(match, probs, ["melbet"], 0.80, min_edge=0.02, max_edge=0.15)
     assert sig is not None
     assert sig.outcome == "w1"
-    assert sig.edge <= 0.12
+    assert sig.edge <= 0.15
 
 
 def test_market_disagrees_on_under_when_over_favorite():

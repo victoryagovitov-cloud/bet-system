@@ -171,7 +171,7 @@ def find_signal(
     bookmaker_ids: list[str],
     min_model_probability: float = 0.80,
     min_edge: float = 0.03,
-    max_edge: float = 0.12,
+    max_edge: float = 0.15,
 ) -> SignalCandidate | None:
     """
     Берём исходы с P_model >= threshold, min_edge <= edge <= max_edge,
