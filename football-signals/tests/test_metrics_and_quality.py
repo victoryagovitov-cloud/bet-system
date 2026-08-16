@@ -385,3 +385,50 @@ def test_logic_fail_open_when_llm_dies():
     client.chat.return_value = '{"ok": false, "summary": "edge подозрительный"}'
     blocked = check_logic(signal, "текст", client=client, enabled=True)
     assert blocked.ok is False
+
+
+def test_logic_hard_blocks_fat_edge_without_llm():
+    signal = SignalCandidate(
+        match_id=1,
+        home_team="A",
+        away_team="B",
+        league_id=1,
+        league_name="L",
+        kickoff=None,
+        outcome="w1",
+        outcome_label="П1",
+        model_prob=0.88,
+        best_bookmaker="melbet",
+        best_odds=2.08,
+        edge=0.35,
+        stake_fraction=0.0333,
+        signal_kind="value",
+    )
+    client = MagicMock()
+    v = check_logic(signal, "VALUE…", client=client, enabled=True, max_edge=0.12)
+    assert v.ok is False
+    assert "жирный" in v.summary or "max" in v.summary
+    client.chat.assert_not_called()
+
+
+def test_logic_missing_ok_field_is_block():
+    signal = SignalCandidate(
+        match_id=1,
+        home_team="A",
+        away_team="B",
+        league_id=1,
+        league_name="L",
+        kickoff=None,
+        outcome="w1",
+        outcome_label="П1",
+        model_prob=0.85,
+        best_bookmaker="melbet",
+        best_odds=1.30,
+        edge=0.08,
+        stake_fraction=0.03,
+        signal_kind="value",
+    )
+    client = MagicMock()
+    client.chat.return_value = '{"summary": "всё ок"}'
+    v = check_logic(signal, "текст", client=client, enabled=True)
+    assert v.ok is False

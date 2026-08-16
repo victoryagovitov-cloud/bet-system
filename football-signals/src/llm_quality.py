@@ -288,47 +288,135 @@ def check_news(
         return QualityVerdict(True, f"news check error (fail-open): {exc}")
 
 
+def _best_odds_map(
+    odds_bk: dict,
+    bookmakers: list[str],
+    outcomes: list[str],
+) -> dict[str, dict[str, float | str]]:
+    from src.value_engine import best_odds_across_bookmakers
+
+    out: dict[str, dict[str, float | str]] = {}
+    for outcome in outcomes:
+        bk, odds = best_odds_across_bookmakers(odds_bk, bookmakers, outcome)
+        if bk is None or odds is None or odds <= 1.0:
+            continue
+        out[outcome] = {
+            "bk": bk,
+            "odds": round(float(odds), 3),
+            "implied": round(1.0 / float(odds), 4),
+        }
+    return out
+
+
 def check_logic(
     signal: SignalCandidate,
     signal_text: str,
     *,
     client: OpenAICompatibleClient | FailoverClient | None,
     enabled: bool,
+    match_detail: dict | None = None,
+    bookmakers: list[str] | None = None,
+    max_edge: float = 0.12,
 ) -> QualityVerdict:
-    """Финальная логическая проверка. Fail-closed, если обе модели молчат/падают."""
+    """
+    Стоп-кран для VALUE перед публикацией.
+    Явный ok=false всегда блокирует. Fail-open только на транспортной ошибке LLM.
+    """
     if not enabled or client is None:
         return QualityVerdict(True, "logic check skipped (disabled/no key)")
 
+    implied = (1.0 / signal.best_odds) if signal.best_odds > 1.0 else None
+    edge = float(signal.edge)
+
+    # Hard stops in code (LLM is second layer, not the only one).
+    if edge <= 0:
+        return QualityVerdict(False, f"edge<=0 ({edge:.3f})")
+    if edge > max_edge:
+        return QualityVerdict(
+            False,
+            f"edge {edge:.1%} > max {max_edge:.0%} — слишком жирный, недоверие к модели",
+        )
+    if signal.model_prob < 0.80:
+        return QualityVerdict(False, f"model_prob {signal.model_prob:.0%} < 80%")
+    if signal.stake_fraction > 0.0333 + 1e-9:
+        return QualityVerdict(False, f"stake {signal.stake_fraction:.4f} > 1/30")
+
+    bks = bookmakers or []
+    odds_bk = (match_detail or {}).get("oddsBk") or {}
+    market_odds = _best_odds_map(
+        odds_bk,
+        bks,
+        [
+            "w1",
+            "x",
+            "w2",
+            "dnb_1",
+            "dnb_2",
+            "dc_1x",
+            "dc_x2",
+            "total_over_25",
+            "total_under_25",
+            "btts_yes",
+            "btts_no",
+        ],
+    )
+    if match_detail and bks:
+        from src.signal_quality import market_disagreement_reason
+
+        disagree = market_disagreement_reason(odds_bk, bks, signal.outcome)
+        if disagree:
+            return QualityVerdict(False, f"против рынка: {disagree}")
+
     prompt = (
-        "Проверь согласованность сигнала перед публикацией в канал.\n"
-        "Правила:\n"
-        "- model_prob должен быть >= 0.80\n"
-        "- edge должен быть > 0 (модель выше implied 1/odds)\n"
-        "- stake_fraction <= 0.0333\n"
-        "- текст не должен противоречить цифрам\n"
-        "- НЕ предлагай публиковать при edge<=0 даже если вероятность высокая\n\n"
-        f"Данные: model_prob={signal.model_prob}, odds={signal.best_odds}, "
-        f"edge={signal.edge}, stake={signal.stake_fraction}, "
-        f"bk={signal.best_bookmaker}, outcome={signal.outcome_label}\n"
-        f"Текст:\n{signal_text}\n\n"
-        "Ответь СТРОГО JSON: {\"ok\": true|false, \"summary\": \"кратко\"}."
+        "Ты стоп-кран канала «Честная ставка», не cheerleader.\n"
+        "Задача: НЕ пропустить мусорный VALUE. Сомневаешься — ok=false.\n\n"
+        "Обязательный отказ (ok=false), если:\n"
+        f"- edge > {max_edge:.0%} (это почти всегда ошибка модели, не «подарок» БК);\n"
+        "- исход спорит с явным фаворитом рынка по 1X2 / тоталу / ОЗ;\n"
+        "- edge выглядит нереально жирным при коротком или длинном кэфе без здравого смысла;\n"
+        "- model_prob < 0.80, edge <= 0, stake > 1/30;\n"
+        "- текст поста противоречит цифрам.\n\n"
+        "ok=true только если цифры согласованы, edge умеренный и нет явного спора с линией.\n\n"
+        f"Матч: {signal.home_team} — {signal.away_team} | {signal.league_name}\n"
+        f"Исход: {signal.outcome_label} ({signal.outcome})\n"
+        f"model_prob={signal.model_prob:.4f}\n"
+        f"best_odds={signal.best_odds:.3f} ({signal.best_bookmaker})\n"
+        f"implied={None if implied is None else round(implied, 4)}\n"
+        f"edge={edge:.4f} ({edge:.1%})\n"
+        f"stake_fraction={signal.stake_fraction:.4f}\n"
+        f"max_edge_allowed={max_edge}\n"
+        f"рынок (лучшие кэфы RU-БК): {json.dumps(market_odds, ensure_ascii=False)}\n\n"
+        f"Текст поста:\n{signal_text}\n\n"
+        "Ответь СТРОГО JSON: {\"ok\": true|false, \"summary\": \"кратко по-русски почему\"}."
     )
     try:
         raw = client.chat(
             [
-                {"role": "system", "content": "Отвечай только валидным JSON."},
+                {
+                    "role": "system",
+                    "content": (
+                        "Ты скептичный риск-контролёр ставок. "
+                        "Отвечай только валидным JSON. При сомнении — ok=false."
+                    ),
+                },
                 {"role": "user", "content": prompt},
             ],
             max_tokens=800,
         )
         data = _extract_json(raw)
-        ok = bool(data.get("ok", True))
+        # Нет явного ok → не пропускаем (скептический default).
+        if "ok" not in data:
+            return QualityVerdict(
+                False,
+                f"logic JSON без поля ok: {str(data.get('summary') or raw)[:500]}",
+                raw,
+            )
+        ok = bool(data.get("ok"))
         summary = str(data.get("summary") or raw)[:1000]
         return QualityVerdict(ok, summary, raw)
     except Exception as exc:
         logger.warning("logic check failed (after failover if any): {}", exc)
-        # Канал не молчит из‑за сбоя шлюза: при ошибке транспорта — fail-open.
-        # Явный ok=false от модели по-прежнему блокирует.
+        # Только транспорт/шлюз: канал не молчит. Явный ok=false выше уже вернул False.
         return QualityVerdict(True, f"logic check error (fail-open): {exc}")
 
 

@@ -198,6 +198,9 @@ def _try_publish(
             text,
             client=logic_client,
             enabled=settings.llm_quality_enabled and settings.logic_llm_enabled,
+            match_detail=detail,
+            bookmakers=bookmakers,
+            max_edge=settings.max_edge,
         )
         if not logic.ok:
             repo.save_signal(
