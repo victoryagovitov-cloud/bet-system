@@ -26,34 +26,27 @@ BOOKMAKER_NAMES = {
 
 def _pct(x: float | None) -> str:
     if x is None:
-        return "—"
+        return "пока нет данных"
     return f"{x:.0%}"
-
-
-def _pp(x: float | None) -> str:
-    """Probability points with sign."""
-    if x is None:
-        return "—"
-    return f"{x * 100:+.1f} п.п."
 
 
 def _body_value(signal: SignalCandidate, bankroll_amount: float) -> str:
     bk = BOOKMAKER_NAMES.get(signal.best_bookmaker, signal.best_bookmaker)
     stake_rub = signal.stake_fraction * bankroll_amount
     return (
-        f"VALUE\n"
+        f"СТАВКА (ценный коэффициент)\n"
         f"────────\n"
         f"Матч: {signal.home_team} — {signal.away_team}\n"
         f"Лига: {signal.league_name}\n"
-        f"Дата/время: {signal.kickoff or '—'}\n"
+        f"Когда: {signal.kickoff or '—'}\n"
         f"\n"
-        f"Исход: {signal.outcome_label}\n"
-        f"Кэф: {bk} @ {signal.best_odds:.2f}\n"
-        f"Оценка модели: {signal.model_prob:.0%}\n"
-        f"Edge: {signal.edge:.1%}\n"
+        f"Что берём: {signal.outcome_label}\n"
+        f"Коэффициент: {bk} @ {signal.best_odds:.2f}\n"
+        f"Наша оценка шанса: {signal.model_prob:.0%}\n"
+        f"Запас над ценой букмекера: {signal.edge:.1%}\n"
         f"\n"
-        f"Ставка: {signal.stake_fraction:.2%} банка "
-        f"({stake_rub:.0f} ₽ при банке {bankroll_amount:.0f} ₽)"
+        f"Размер: {signal.stake_fraction:.2%} банка "
+        f"(около {stake_rub:.0f} ₽, если банк {bankroll_amount:.0f} ₽)"
     )
 
 
@@ -63,28 +56,30 @@ def _body_lock(signal: SignalCandidate, bankroll_amount: float) -> str:
     reasons = signal.lock_reasons or []
     reason_block = ""
     if reasons:
-        reason_block = "Почему верняк:\n" + "\n".join(f"— {r}" for r in reasons[:5]) + "\n\n"
+        reason_block = "Почему это сильный фаворит:\n" + "\n".join(
+            f"— {r}" for r in reasons[:5]
+        ) + "\n\n"
     conf = (
-        f"Уверенность AI: {signal.lock_confidence:.0%}\n"
+        f"Уверенность проверки: {signal.lock_confidence:.0%}\n"
         if signal.lock_confidence is not None
         else ""
     )
     return (
-        f"ВЕРНЯК\n"
+        f"ВЕРНЯК (явный фаворит)\n"
         f"────────\n"
         f"Матч: {signal.home_team} — {signal.away_team}\n"
         f"Лига: {signal.league_name}\n"
-        f"Дата/время: {signal.kickoff or '—'}\n"
+        f"Когда: {signal.kickoff or '—'}\n"
         f"\n"
-        f"Исход: {signal.outcome_label}\n"
-        f"Кэф: {bk} @ {signal.best_odds:.2f}\n"
-        f"Оценка модели: {signal.model_prob:.0%}\n"
+        f"Что берём: {signal.outcome_label}\n"
+        f"Коэффициент: {bk} @ {signal.best_odds:.2f}\n"
+        f"Наша оценка шанса: {signal.model_prob:.0%}\n"
         f"{conf}"
-        f"Линия согласна с фаворитом — это не поиск value/edge.\n"
+        f"Здесь ищем не «вкусную цену», а команду сильнее соперника на голову.\n"
         f"\n"
         f"{reason_block}"
-        f"Ставка: {signal.stake_fraction:.2%} банка "
-        f"({stake_rub:.0f} ₽ при банке {bankroll_amount:.0f} ₽)"
+        f"Размер: {signal.stake_fraction:.2%} банка "
+        f"(около {stake_rub:.0f} ₽, если банк {bankroll_amount:.0f} ₽)"
     )
 
 
@@ -106,98 +101,135 @@ def format_daily_digest(
     pending_settlement: int | None = None,
 ) -> str:
     """
-    Короткая сводка для «живости» канала даже в дни без ставок.
+    Короткая сводка простым языком — даже в дни без ставок.
     """
     if date_window and len(date_window) > 1:
-        head = (
-            f"СВОДКА · {date_window[0].isoformat()} … {date_window[-1].isoformat()}"
-        )
+        dates = f"{date_window[0].isoformat()} — {date_window[-1].isoformat()}"
     else:
-        head = f"СВОДКА · {target_date.isoformat()}"
-    lines = [
-        head,
-        "────────",
-        "Прогон: ok",
-        f"Матчей с RU-кэфами: {matches_with_odds}",
-        f"Whitelist (prematch): {matches_in_whitelist}",
+        dates = target_date.isoformat()
+
+    parts = [
+        f"Коротко по проверке · {dates}",
+        "",
+        "Проверка прошла нормально.",
+        f"Посмотрели матчей с коэффициентами наших букмекеров: {matches_with_odds}.",
+        f"Из них в наших лигах до игры: {matches_in_whitelist}.",
     ]
     if pending_settlement is not None:
-        lines.append(f"В очереди учёта (ещё без результата): {pending_settlement}")
+        parts.append(
+            f"Ещё ждём результата по ранее данным сигналам: {pending_settlement}."
+        )
 
     if not signals:
-        lines.append("")
-        lines.append(
-            "Новых ставок нет: фильтр (P≥80% + edge / верняк+AI) ничего не пропустил. "
-            "Так и должно быть в строгие дни."
+        parts.extend(
+            [
+                "",
+                "Новых ставок сейчас нет.",
+                "Мы публикуем только то, что проходит строгие правила. "
+                "Сегодня подходящего варианта не нашлось — так бывает, и это нормально.",
+                "Лучше помолчать, чем дать слабый купон «для галочки».",
+                "Следующая проверка снова пройдёт по календарю.",
+                "",
+                pick_education(),
+                pick_discipline(),
+                pick_closing(),
+            ]
         )
-        lines.append(
-            "Канал молчит о купоне лучше, чем публикует слабый. "
-            "Следующий прогон снова проверит календарь."
-        )
-        lines.append("")
-        lines.append(f"📌 {pick_education()}")
-        lines.append(pick_discipline())
-        lines.append(pick_closing())
     else:
         n_value = sum(1 for s in signals if (s.signal_kind or "value") != "lock")
         n_lock = sum(1 for s in signals if (s.signal_kind or "") == "lock")
-        lines.append("")
-        lines.append(f"Опубликовано сейчас: {len(signals)} (value={n_value}, верняк={n_lock})")
+        parts.extend(
+            [
+                "",
+                f"Сейчас опубликовали сигналов: {len(signals)} "
+                f"(ценный коэффициент — {n_value}, верняк — {n_lock}).",
+            ]
+        )
         for s in signals:
-            tag = "ВЕРНЯК" if (s.signal_kind or "") == "lock" else "VALUE"
-            lines.append(
+            tag = "верняк" if (s.signal_kind or "") == "lock" else "ценный кэф"
+            bk = BOOKMAKER_NAMES.get(s.best_bookmaker, s.best_bookmaker)
+            parts.append(
                 f"— [{tag}] {s.home_team} — {s.away_team}: {s.outcome_label} "
-                f"({s.model_prob:.0%}, {s.best_bookmaker}@{s.best_odds:.2f})"
+                f"(шанс ~{s.model_prob:.0%}, {bk} {s.best_odds:.2f})"
             )
-        lines.append("")
-        lines.append(f"📌 {pick_education()}")
-        lines.append(pick_discipline())
-        lines.append(pick_closing())
+        parts.extend(
+            [
+                "",
+                pick_education(),
+                pick_discipline(),
+                pick_closing(),
+            ]
+        )
 
-    lines.append("")
-    lines.append(f"⚠️ {pick_disclaimer()}")
-    return "\n".join(lines)
+    parts.extend(["", f"⚠️ {pick_disclaimer()}"])
+    return "\n".join(parts)
 
 
 def format_accounting_report(snap: SettleSnapshot) -> str:
-    """Мини-отчёт после settle: прозрачность учёта, без давления ставить."""
-    lines = [
-        "УЧЁТ РЕЗУЛЬТАТОВ",
-        "────────",
-        f"Закрыто сейчас: {snap.settled_now}"
-        + (f" (из них void: {snap.voids_now})" if snap.voids_now else ""),
-        f"Всего оценено (win/loss): {snap.n}",
-        f"В очереди (ещё открыты): {snap.pending}",
+    """Отчёт по результатам простым языком."""
+    parts = [
+        "Как сыграли наши сигналы",
+        "",
     ]
+    if snap.settled_now:
+        void_bit = (
+            f" (из них возвратов: {snap.voids_now})" if snap.voids_now else ""
+        )
+        parts.append(f"Только что посчитали новых матчей: {snap.settled_now}{void_bit}.")
+    else:
+        parts.append("Новых завершённых матчей по нашим сигналам сейчас нет.")
+
+    parts.append(f"Всего уже посчитано ставок: {snap.n}.")
+    parts.append(f"Ещё ждут своего матча: {snap.pending}.")
+
     if snap.n > 0:
-        gap = None
+        parts.append("")
+        parts.append(f"Зашло из посчитанных: {_pct(snap.hit_rate)}.")
+        parts.append(
+            f"В среднем мы ожидали захода около {_pct(snap.mean_model_prob)}."
+        )
         if snap.mean_model_prob is not None and snap.hit_rate is not None:
             gap = snap.mean_model_prob - snap.hit_rate
-        lines.append("")
-        lines.append(f"Hit-rate: {_pct(snap.hit_rate)}")
-        lines.append(f"Средняя P модели: {_pct(snap.mean_model_prob)}")
-        if gap is not None:
-            lines.append(f"Разрыв (модель − факт): {_pp(gap)}")
-        lines.append(f"CLV ср.: {_pp(snap.mean_clv)}")
-        if snap.brier is not None:
-            lines.append(f"Brier: {snap.brier:.3f}")
+            if gap > 0.03:
+                parts.append(
+                    "Пока факты чуть скромнее наших оценок — рано паниковать, "
+                    "выборки ещё мало."
+                )
+            elif gap < -0.03:
+                parts.append(
+                    "Пока заходит чуть чаще, чем мы закладывали — тоже рано радоваться, "
+                    "нужно больше матчей."
+                )
+            else:
+                parts.append("Пока оценка и факты идут примерно рядом.")
+        if snap.mean_clv is not None:
+            # Keep CLV only if present, in plain words
+            if snap.mean_clv > 0:
+                parts.append(
+                    "К моменту начала матчей линия в среднем двигалась в нашу пользу."
+                )
+            elif snap.mean_clv < 0:
+                parts.append(
+                    "К моменту начала матчей линия в среднем двигалась не в нашу пользу."
+                )
     else:
-        lines.append("")
-        lines.append(
-            "Выборка ещё пустая или только копится — рано судить о плюсе/минусе системы."
+        parts.append("")
+        parts.append(
+            "Пока почти нечего считать. О плюсе или минусе системы говорить рано."
         )
 
-    lines.append("")
+    parts.append("")
     if snap.n < 80:
-        lines.append(
-            f"Режим наблюдения: копим статистику (цель ~80–100 закрытых). "
-            f"Сейчас {snap.n}. Пороги модели не крутим по эмоциям."
+        parts.append(
+            f"Мы в режиме наблюдения: копим честную статистику "
+            f"(ориентир — примерно 80–100 закрытых ставок). Сейчас {snap.n}. "
+            "Правила из‑за эмоций не меняем."
         )
     else:
-        lines.append(
-            "Выборка уже достаточна для первичного разбора калибровки "
-            "(hit-rate / CLV / Brier) — без спешки менять правила."
+        parts.append(
+            "Выборки уже достаточно, чтобы спокойно смотреть, не врёт ли нам оценка. "
+            "Без спешки менять правила."
         )
-    lines.append(pick_closing())
-    lines.append(f"⚠️ {pick_disclaimer()}")
-    return "\n".join(lines)
+    parts.append(pick_closing())
+    parts.append(f"⚠️ {pick_disclaimer()}")
+    return "\n".join(parts)

@@ -123,13 +123,12 @@ def test_daily_digest_zero_signals():
         signals=[],
         pending_settlement=3,
     )
-    assert "СВОДКА" in text
-    assert "Прогон: ok" in text
+    assert "Коротко по проверке" in text
+    assert "Проверка прошла нормально" in text
     assert "100" in text
-    assert "очереди учёта" in text
+    assert "ждут результата" in text or "ранее данным" in text
+    assert "Новых ставок сейчас нет" in text
     assert "⚠️" in text
-    assert "P≥80%" in text or "P>=80%" in text
-    assert "📌" in text
 
 
 def test_format_accounting_report():
@@ -148,8 +147,8 @@ def test_format_accounting_report():
             by_league={},
         )
     )
-    assert empty.startswith("УЧЁТ РЕЗУЛЬТАТОВ")
-    assert "копится" in empty or "пустая" in empty
+    assert empty.startswith("Как сыграли наши сигналы")
+    assert "рано" in empty.lower() or "нечего считать" in empty.lower()
 
     filled = format_accounting_report(
         SettleSnapshot(
@@ -164,9 +163,8 @@ def test_format_accounting_report():
             by_league={},
         )
     )
-    assert "Hit-rate" in filled
-    assert "CLV" in filled
-    assert "наблюдения" in filled
+    assert "Зашло из посчитанных" in filled
+    assert "режиме наблюдения" in filled
 
 
 def test_lock_prefilter_accepts_dominant_favorite():
@@ -315,7 +313,7 @@ def test_format_lock_signal():
     assert "Сильный H2H" in text
     assert "Edge:" not in text
     assert "⚠️" in text
-    assert "Ставка:" in text
+    assert "Размер:" in text or "Ставка:" in text
 
 
 def test_format_value_has_disclaimer_footer():
@@ -336,8 +334,8 @@ def test_format_value_has_disclaimer_footer():
         signal_kind="value",
     )
     text = format_signal(s, 30000)
-    assert text.startswith("VALUE")
-    assert "Edge: 5.0%" in text
+    assert text.startswith("СТАВКА")
+    assert "Запас над ценой букмекера: 5.0%" in text
     assert "⚠️" in text
     assert "────────" in text
 
