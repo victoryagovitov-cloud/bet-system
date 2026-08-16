@@ -331,6 +331,13 @@ def run_daily_pipeline(
             matches_in_whitelist += len(allowed)
             logger.info("date={} after league whitelist: {}", day, len(allowed))
 
+            value_pool: list[
+                tuple[value_engine.SignalCandidate, dict, dict[str, float]]
+            ] = []
+            lock_pool: list[
+                tuple[value_engine.SignalCandidate, dict, dict[str, float]]
+            ] = []
+
             for m in allowed:
                 match_id = m.get("id")
                 try:
@@ -345,13 +352,13 @@ def run_daily_pipeline(
                 attach_season_stats(detail, _season_index_for(tid))
                 model_probs = probability_model.compute(detail)
 
-                # 1) VALUE first
                 signal = value_engine.find_signal(
                     detail,
                     model_probs,
                     bookmakers,
                     min_model_probability=settings.min_model_probability,
                     min_edge=settings.min_edge,
+                    max_edge=settings.max_edge,
                 )
                 if signal:
                     stake = stake_engine.calculate_stake_fraction(
@@ -369,52 +376,63 @@ def run_daily_pipeline(
                         signal = None
                     else:
                         signal.stake_fraction = stake
-                        published = _try_publish(
-                            signal=signal,
-                            detail=detail,
-                            model_probs=model_probs,
-                            settings=settings,
-                            repo=repo,
-                            bookmakers=bookmakers,
-                            news_client=news_client,
-                            logic_client=logic_client,
-                            lock_client=lock_client,
-                        )
-                        if published:
-                            signals.append(published)
-                            continue
+                        value_pool.append((signal, detail, model_probs))
 
-                # 2) LOCK if no value published
-                if not settings.lock_signals_enabled:
+                if signal is None and settings.lock_signals_enabled:
+                    lock_signal = value_engine.find_lock_candidate(
+                        detail,
+                        model_probs,
+                        bookmakers,
+                        min_model_probability=settings.lock_min_model_probability,
+                        odds_min=settings.lock_odds_min,
+                        odds_max=settings.lock_odds_max,
+                        min_lambda_gap=settings.lock_min_lambda_gap,
+                        min_h2h_games=settings.lock_min_h2h_games,
+                        min_h2h_share=settings.lock_min_h2h_share,
+                    )
+                    if lock_signal:
+                        lock_signal.stake_fraction = (
+                            stake_engine.calculate_lock_stake_fraction(
+                                settings.lock_stake_fraction
+                            )
+                        )
+                        lock_pool.append((lock_signal, detail, model_probs))
+                elif signal is None and not settings.lock_signals_enabled:
                     logger.debug(
                         "no value and locks disabled match={} probs={}",
                         match_id,
                         probability_model.summarize_for_log(model_probs),
                     )
-                    continue
 
-                lock_signal = value_engine.find_lock_candidate(
-                    detail,
-                    model_probs,
-                    bookmakers,
-                    min_model_probability=settings.lock_min_model_probability,
-                    odds_min=settings.lock_odds_min,
-                    odds_max=settings.lock_odds_max,
-                    min_lambda_gap=settings.lock_min_lambda_gap,
-                    min_h2h_games=settings.lock_min_h2h_games,
-                    min_h2h_share=settings.lock_min_h2h_share,
+            value_pool.sort(key=lambda t: t[0].edge, reverse=True)
+            max_n = max(0, int(settings.max_value_signals_per_run))
+            selected_values = value_pool[:max_n]
+            if len(value_pool) > max_n:
+                logger.info(
+                    "value cap: kept {}/{} candidates (max_edge filter already applied)",
+                    max_n,
+                    len(value_pool),
                 )
-                if not lock_signal:
-                    logger.debug(
-                        "no signal match={} probs={}",
-                        match_id,
-                        probability_model.summarize_for_log(model_probs),
-                    )
-                    continue
+            selected_match_ids = {s.match_id for s, _, _ in selected_values}
 
-                lock_signal.stake_fraction = stake_engine.calculate_lock_stake_fraction(
-                    settings.lock_stake_fraction
+            for signal, detail, model_probs in selected_values:
+                published = _try_publish(
+                    signal=signal,
+                    detail=detail,
+                    model_probs=model_probs,
+                    settings=settings,
+                    repo=repo,
+                    bookmakers=bookmakers,
+                    news_client=news_client,
+                    logic_client=logic_client,
+                    lock_client=lock_client,
                 )
+                if published:
+                    signals.append(published)
+
+            for lock_signal, detail, model_probs in lock_pool:
+                if lock_signal.match_id in selected_match_ids:
+                    continue
                 published = _try_publish(
                     signal=lock_signal,
                     detail=detail,

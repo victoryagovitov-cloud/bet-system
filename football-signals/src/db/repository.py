@@ -92,6 +92,30 @@ class SignalRepository:
                 row.best_bookmaker = new_bookmaker
                 session.commit()
 
+    def update_status(self, signal_id: int, status: str, *, note: str | None = None) -> None:
+        with self._Session() as session:
+            row = session.get(SignalRow, signal_id)
+            if not row:
+                return
+            row.status = status
+            if note:
+                prev = row.logic_check_summary or ""
+                row.logic_check_summary = (prev + " | " if prev else "") + note
+            session.commit()
+
+    def list_published_since(self, since: datetime) -> list[SignalRow]:
+        with self._Session() as session:
+            rows = session.scalars(
+                select(SignalRow).where(
+                    SignalRow.status == "published",
+                    SignalRow.published_at.is_not(None),
+                    SignalRow.published_at >= since,
+                )
+            ).all()
+            for row in rows:
+                session.expunge(row)
+            return list(rows)
+
     def unsettled(self) -> list[SignalRow]:
         with self._Session() as session:
             rows = session.scalars(

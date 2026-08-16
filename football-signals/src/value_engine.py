@@ -6,6 +6,7 @@ from typing import Any
 from loguru import logger
 
 from src.lineup_context import blocks_outcome, extract_missing
+from src.signal_quality import quality_skip_reason
 
 # Markets allowed as «верняк» candidates (favorite win / not lose).
 LOCK_OUTCOMES = frozenset({"w1", "w2", "dnb_1", "dnb_2", "dc_1x", "dc_x2"})
@@ -170,10 +171,11 @@ def find_signal(
     bookmaker_ids: list[str],
     min_model_probability: float = 0.80,
     min_edge: float = 0.03,
+    max_edge: float = 0.12,
 ) -> SignalCandidate | None:
     """
-    Берём исходы с P_model >= threshold, edge >= min_edge против лучшего из 4 БК,
-    публикуем один исход на матч — с максимальным edge.
+    Берём исходы с P_model >= threshold, min_edge <= edge <= max_edge,
+    без спора с рынком; один исход на матч — с максимальным (но разумным) edge.
     """
     odds_bk = match.get("oddsBk") or {}
     candidates: list[SignalCandidate] = []
@@ -202,10 +204,26 @@ def find_signal(
         best_bk, best_odds = best_odds_across_bookmakers(odds_bk, bookmaker_ids, outcome)
         if best_bk is None or best_odds is None or best_odds <= 1.0:
             continue
-        implied = 1.0 / best_odds
-        edge = model_prob - implied
-        if edge < min_edge:
+        skip = quality_skip_reason(
+            odds_bk,
+            bookmaker_ids,
+            outcome,
+            float(model_prob),
+            float(best_odds),
+            min_edge=min_edge,
+            max_edge=max_edge,
+            model_probs=model_probs,
+        )
+        if skip:
+            logger.info(
+                "skip value outcome={} match={} ({})",
+                outcome,
+                match.get("id"),
+                skip,
+            )
             continue
+        implied = 1.0 / best_odds
+        edge = float(model_prob) - implied
         candidates.append(
             SignalCandidate(
                 match_id=int(match["id"]),
@@ -228,6 +246,7 @@ def find_signal(
 
     if not candidates:
         return None
+    # Prefer moderate high-quality edges; still pick best among survivors.
     return max(candidates, key=lambda c: c.edge)
 
 
