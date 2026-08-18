@@ -1,6 +1,6 @@
 {
-  "settled_now": 3,
-  "voids_now": 1,
+  "settled_now": 0,
+  "voids_now": 0,
   "pending": 1,
   "n": 17,
   "hit_rate": 0.7647058823529411,
