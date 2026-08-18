@@ -121,13 +121,11 @@ def test_daily_digest_zero_signals():
         matches_with_odds=100,
         matches_in_whitelist=8,
         signals=[],
-        pending_settlement=3,
     )
     assert "Коротко по проверке" in text
     assert "Новых ставок нет" in text
     assert "100" in text
-    assert "3 ставкам" in text
-    assert "не новые ставки" in text
+    assert "ждём результат" not in text.lower()
     assert "по расписанию" in text
     assert "⚠️" in text
 
@@ -350,7 +348,6 @@ def test_digest_uses_plain_channel_terms():
         matches_with_odds=10,
         matches_in_whitelist=3,
         signals=[],
-        pending_settlement=1,
         footer_tip="День без ставки — норма.",
     )
     assert "купон" not in empty.lower()
@@ -358,8 +355,7 @@ def test_digest_uses_plain_channel_terms():
     assert "сигнал" not in empty.lower()
     assert "Новых ставок нет" in empty
     assert "не новый прогноз" in empty
-    assert "одной ставке" in empty
-    assert "не новая ставка" in empty
+    assert "ждём результат" not in empty.lower()
     assert empty.count("⚠️") == 1
     # Одна короткая фраза в подвале, не три подряд.
     assert "День без ставки — норма." in empty

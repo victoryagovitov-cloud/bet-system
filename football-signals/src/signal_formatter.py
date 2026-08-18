@@ -24,17 +24,6 @@ def _pct(x: float | None) -> str:
     return f"{x:.0%}"
 
 
-def _pending_line(n: int) -> str:
-    if n <= 0:
-        return "Ранее данных ставок в ожидании нет."
-    if n == 1:
-        return "Ещё ждём результат по одной ставке, которую давали раньше — это не новая ставка."
-    return (
-        f"Ещё ждём результат по {n} ставкам, которые давали раньше — "
-        "это не новые ставки."
-    )
-
-
 def _body_value(signal: SignalCandidate, bankroll_amount: float) -> str:
     bk = BOOKMAKER_NAMES.get(signal.best_bookmaker, signal.best_bookmaker)
     stake_rub = signal.stake_fraction * bankroll_amount
@@ -109,7 +98,6 @@ def format_daily_digest(
     matches_in_whitelist: int,
     signals: list[SignalCandidate],
     date_window: list[date] | None = None,
-    pending_settlement: int | None = None,
     rotator: RotatingTips | None = None,
     footer_tip: str | None = None,
 ) -> str:
@@ -134,8 +122,6 @@ def format_daily_digest(
                 f"В наших лигах до игры: {matches_in_whitelist}.",
             ]
         )
-        if pending_settlement:
-            parts.append(_pending_line(pending_settlement))
         parts.extend(
             [
                 "Подходящего варианта не нашлось — так бывает, это нормально.",
@@ -152,8 +138,6 @@ def format_daily_digest(
                 f"В наших лигах до игры: {matches_in_whitelist}.",
             ]
         )
-        if pending_settlement:
-            parts.append(_pending_line(pending_settlement))
         parts.extend(
             [
                 "",
