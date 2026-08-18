@@ -24,6 +24,17 @@ def _pct(x: float | None) -> str:
     return f"{x:.0%}"
 
 
+def _pending_line(n: int) -> str:
+    if n <= 0:
+        return "Ранее данных ставок в ожидании нет."
+    if n == 1:
+        return "Ещё ждём результат по одной ставке, которую давали раньше — это не новая ставка."
+    return (
+        f"Ещё ждём результат по {n} ставкам, которые давали раньше — "
+        "это не новые ставки."
+    )
+
+
 def _body_value(signal: SignalCandidate, bankroll_amount: float) -> str:
     bk = BOOKMAKER_NAMES.get(signal.best_bookmaker, signal.best_bookmaker)
     stake_rub = signal.stake_fraction * bankroll_amount
@@ -113,24 +124,22 @@ def format_daily_digest(
     parts = [
         f"Коротко по проверке · {dates}",
         "",
-        "Проверка прошла нормально.",
-        f"Посмотрели матчей с коэффициентами наших букмекеров: {matches_with_odds}.",
-        f"Из них в наших лигах до игры: {matches_in_whitelist}.",
     ]
-    if pending_settlement is not None:
-        parts.append(
-            f"Ещё ждём результата по ранее данным сигналам: {pending_settlement}."
-        )
 
     if not signals:
         parts.extend(
             [
-                "",
-                "Новых ставок сейчас нет.",
-                "Мы публикуем только то, что проходит строгие правила. "
-                "Сегодня подходящего варианта не нашлось — так бывает, и это нормально.",
-                "Лучше помолчать, чем дать слабую ставку «для галочки».",
-                "Следующая проверка снова пройдёт по расписанию.",
+                "Новых ставок нет — это проверка, а не новый прогноз.",
+                f"Посмотрели матчей с коэффициентами наших букмекеров: {matches_with_odds}.",
+                f"В наших лигах до игры: {matches_in_whitelist}.",
+            ]
+        )
+        if pending_settlement:
+            parts.append(_pending_line(pending_settlement))
+        parts.extend(
+            [
+                "Подходящего варианта не нашлось — так бывает, это нормально.",
+                "Следующая проверка пройдёт по расписанию.",
             ]
         )
     else:
@@ -138,8 +147,17 @@ def format_daily_digest(
         n_lock = sum(1 for s in signals if (s.signal_kind or "") == "lock")
         parts.extend(
             [
+                "Проверка прошла нормально.",
+                f"Посмотрели матчей с коэффициентами наших букмекеров: {matches_with_odds}.",
+                f"В наших лигах до игры: {matches_in_whitelist}.",
+            ]
+        )
+        if pending_settlement:
+            parts.append(_pending_line(pending_settlement))
+        parts.extend(
+            [
                 "",
-                f"Сейчас опубликовали сигналов: {len(signals)} "
+                f"Сейчас опубликовали ставок: {len(signals)} "
                 f"(хорошая цена — {n_value}, верняк — {n_lock}).",
             ]
         )
