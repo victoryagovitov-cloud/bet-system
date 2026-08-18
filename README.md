@@ -4,7 +4,8 @@
 
 Рабочий код только в папке [`football-signals/`](football-signals/).
 
-Расписание GitHub Actions (МСК): 08:00 / 14:00 / 20:00 — workflow  
+Расписание GitHub Actions (МСК): старт 08:00 / 13:30 / 19:30 — пост в канале
+обычно через ~30 мин (08:30 / 14:00 / 20:00). Workflow  
 [`.github/workflows/football-signals.yml`](.github/workflows/football-signals.yml).
 
 Локально:
