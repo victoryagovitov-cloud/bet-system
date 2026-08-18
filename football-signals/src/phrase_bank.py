@@ -5,7 +5,12 @@
 
 from __future__ import annotations
 
+import json
 import random
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROTATION_PATH = ROOT / "data" / "phrase_rotation.json"
 
 DISCLAIMERS: list[str] = [
     "Ставки — это риск. Можно потерять деньги. Решайте сами и ставьте только лишние.",
@@ -39,6 +44,46 @@ CLOSING_PHRASES: list[str] = [
     "Ваше спокойствие важнее любой ставки.",
 ]
 
+ROTATING_TIPS: list[str] = DISCIPLINE_TIPS + EDUCATION_TIPS + CLOSING_PHRASES
+
+
+class RotatingTips:
+    """One short footer line per post; index persists between runs."""
+
+    def __init__(self, path: Path | None = None):
+        self.path = path or DEFAULT_ROTATION_PATH
+        self._idx = 0
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            self._idx = 0
+            return
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            self._idx = 0
+            return
+        if isinstance(raw, dict):
+            self._idx = int(raw.get("idx") or 0)
+        else:
+            self._idx = 0
+
+    def _save(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps({"idx": self._idx}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def next(self) -> str:
+        if not ROTATING_TIPS:
+            return ""
+        tip = ROTATING_TIPS[self._idx % len(ROTATING_TIPS)]
+        self._idx += 1
+        self._save()
+        return tip
+
 
 def pick_disclaimer(*, rng: random.Random | None = None) -> str:
     r = rng or random
@@ -60,10 +105,7 @@ def pick_closing(*, rng: random.Random | None = None) -> str:
     return r.choice(CLOSING_PHRASES)
 
 
-def format_footer(*, rng: random.Random | None = None) -> str:
-    """Подвал каждого поста: дисциплина → закрытие → дисклеймер."""
-    return (
-        f"{pick_discipline(rng=rng)}\n"
-        f"{pick_closing(rng=rng)}\n"
-        f"⚠️ {pick_disclaimer(rng=rng)}"
-    )
+def format_footer(*, tip: str | None = None, rotator: RotatingTips | None = None) -> str:
+    """Подвал поста: одна короткая фраза + дисклеймер."""
+    line = tip if tip is not None else (rotator.next() if rotator else pick_closing())
+    return f"{line}\n⚠️ {pick_disclaimer()}"

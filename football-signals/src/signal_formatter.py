@@ -3,13 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
-from src.phrase_bank import (
-    format_footer,
-    pick_closing,
-    pick_disclaimer,
-    pick_discipline,
-    pick_education,
-)
+from src.phrase_bank import RotatingTips, format_footer, pick_disclaimer
 from src.value_engine import SignalCandidate
 
 if TYPE_CHECKING:
@@ -83,12 +77,18 @@ def _body_lock(signal: SignalCandidate, bankroll_amount: float) -> str:
     )
 
 
-def format_signal(signal: SignalCandidate, bankroll_amount: float) -> str:
+def format_signal(
+    signal: SignalCandidate,
+    bankroll_amount: float,
+    *,
+    rotator: RotatingTips | None = None,
+    footer_tip: str | None = None,
+) -> str:
     kind = (signal.signal_kind or "value").lower()
     body = _body_lock(signal, bankroll_amount) if kind == "lock" else _body_value(
         signal, bankroll_amount
     )
-    return f"{body}\n\n────────\n{format_footer()}"
+    return f"{body}\n\n────────\n{format_footer(tip=footer_tip, rotator=rotator)}"
 
 
 def format_daily_digest(
@@ -99,6 +99,8 @@ def format_daily_digest(
     signals: list[SignalCandidate],
     date_window: list[date] | None = None,
     pending_settlement: int | None = None,
+    rotator: RotatingTips | None = None,
+    footer_tip: str | None = None,
 ) -> str:
     """
     Короткая сводка простым языком — даже в дни без ставок.
@@ -129,10 +131,6 @@ def format_daily_digest(
                 "Сегодня подходящего варианта не нашлось — так бывает, и это нормально.",
                 "Лучше помолчать, чем дать слабую ставку «для галочки».",
                 "Следующая проверка снова пройдёт по календарю.",
-                "",
-                pick_education(),
-                pick_discipline(),
-                pick_closing(),
             ]
         )
     else:
@@ -152,20 +150,23 @@ def format_daily_digest(
                 f"— [{tag}] {s.home_team} — {s.away_team}: {s.outcome_label} "
                 f"(шанс ~{s.model_prob:.0%}, {bk} {s.best_odds:.2f})"
             )
-        parts.extend(
-            [
-                "",
-                pick_education(),
-                pick_discipline(),
-                pick_closing(),
-            ]
-        )
+
+    tip = footer_tip if footer_tip is not None else (
+        rotator.next() if rotator else None
+    )
+    if tip:
+        parts.extend(["", tip])
 
     parts.extend(["", f"⚠️ {pick_disclaimer()}"])
     return "\n".join(parts)
 
 
-def format_accounting_report(snap: SettleSnapshot) -> str:
+def format_accounting_report(
+    snap: SettleSnapshot,
+    *,
+    rotator: RotatingTips | None = None,
+    footer_tip: str | None = None,
+) -> str:
     """Отчёт по результатам простым языком."""
     parts = [
         "Как сыграли наши сигналы",
@@ -230,6 +231,10 @@ def format_accounting_report(snap: SettleSnapshot) -> str:
             "Выборки уже достаточно, чтобы спокойно смотреть, не врёт ли нам оценка. "
             "Без спешки менять правила."
         )
-    parts.append(pick_closing())
+    tip = footer_tip if footer_tip is not None else (
+        rotator.next() if rotator else None
+    )
+    if tip:
+        parts.append(tip)
     parts.append(f"⚠️ {pick_disclaimer()}")
     return "\n".join(parts)

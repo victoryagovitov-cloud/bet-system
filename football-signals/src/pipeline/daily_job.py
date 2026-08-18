@@ -14,6 +14,7 @@ from config.settings import get_settings
 from src.api_sport_client import ApiSportClient, ApiSportError
 from src.db.repository import SignalRepository
 from src.league_filter import is_league_allowed
+from src.phrase_bank import RotatingTips
 from src import (
     llm_quality,
     max_publisher,
@@ -100,6 +101,7 @@ def _try_publish(
     news_client,
     logic_client,
     lock_client,
+    rotator,
 ) -> value_engine.SignalCandidate | None:
     existing = repo.get_by_match_outcome(signal.match_id, signal.outcome)
     if existing is not None:
@@ -171,7 +173,9 @@ def _try_publish(
         signal.lock_reasons = list(lock.reasons or [])
         signal.lock_confidence = lock.confidence
 
-    text = signal_formatter.format_signal(signal, settings.bankroll_amount)
+    text = signal_formatter.format_signal(
+        signal, settings.bankroll_amount, rotator=rotator
+    )
 
     news = llm_quality.check_news(
         signal,
@@ -224,7 +228,9 @@ def _try_publish(
 
     # Re-format lock text after reasons filled
     if kind == "lock":
-        text = signal_formatter.format_signal(signal, settings.bankroll_amount)
+        text = signal_formatter.format_signal(
+        signal, settings.bankroll_amount, rotator=rotator
+    )
 
     publish_ref = max_publisher.publish_signal(
         text,
@@ -288,6 +294,7 @@ def run_daily_pipeline(
     matches_in_whitelist = 0
     label = ",".join(d.isoformat() for d in dates)
     standings_cache: dict[int, dict] = {}
+    rotator = RotatingTips()
 
     logger.info("pipeline start dates={} bookmakers={}", label, bookmakers)
 
@@ -430,6 +437,7 @@ def run_daily_pipeline(
                     news_client=news_client,
                     logic_client=logic_client,
                     lock_client=lock_client,
+                    rotator=rotator,
                 )
                 if published:
                     signals.append(published)
@@ -447,6 +455,7 @@ def run_daily_pipeline(
                     news_client=news_client,
                     logic_client=logic_client,
                     lock_client=lock_client,
+                    rotator=rotator,
                 )
                 if published:
                     signals.append(published)
@@ -460,6 +469,7 @@ def run_daily_pipeline(
         signals=signals,
         date_window=dates if len(dates) > 1 else None,
         pending_settlement=pending,
+        rotator=rotator,
     )
     digest_ref = max_publisher.publish_signal(
         digest,

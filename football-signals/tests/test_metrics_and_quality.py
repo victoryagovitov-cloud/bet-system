@@ -349,11 +349,15 @@ def test_digest_uses_plain_channel_terms():
         matches_with_odds=10,
         matches_in_whitelist=3,
         signals=[],
+        footer_tip="День без ставки — норма.",
     )
     assert "купон" not in empty.lower()
     assert "ценный" not in empty.lower()
     assert "Новых ставок сейчас нет" in empty
     assert "слабую ставку" in empty
+    assert empty.count("⚠️") == 1
+    # Одна короткая фраза в подвале, не три подряд.
+    assert "День без ставки — норма." in empty
 
     s = SignalCandidate(
         match_id=2,
@@ -376,11 +380,31 @@ def test_digest_uses_plain_channel_terms():
         matches_with_odds=10,
         matches_in_whitelist=3,
         signals=[s],
+        footer_tip="Берегите банк и голову.",
     )
     assert "хорошая цена — 1" in filled
     assert "[хорошая цена]" in filled
     assert "ценный" not in filled.lower()
     assert "купон" not in filled.lower()
+    assert filled.count("⚠️") == 1
+    assert "Берегите банк и голову." in filled
+    assert "Разбираем честно" not in filled
+
+
+def test_rotating_tips_cycles(tmp_path):
+    from src.phrase_bank import ROTATING_TIPS, RotatingTips
+
+    path = tmp_path / "phrase_rotation.json"
+    rot = RotatingTips(path)
+    first = rot.next()
+    second = rot.next()
+    assert first in ROTATING_TIPS
+    assert second in ROTATING_TIPS
+    assert first != second or len(ROTATING_TIPS) == 1
+
+    rot2 = RotatingTips(path)
+    third = rot2.next()
+    assert third == ROTATING_TIPS[2 % len(ROTATING_TIPS)]
 
 
 def test_failover_uses_backup_on_primary_fail():

@@ -13,6 +13,7 @@ from loguru import logger
 
 from config.settings import get_settings
 from src import max_publisher, signal_formatter
+from src.phrase_bank import RotatingTips
 from src.settlement import settle_pending
 
 
@@ -31,7 +32,8 @@ def main() -> int:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
     if args.publish:
-        text = signal_formatter.format_accounting_report(snap)
+        rotator = RotatingTips()
+        text = signal_formatter.format_accounting_report(snap, rotator=rotator)
         ref = max_publisher.publish_signal(
             text,
             chat_id=settings.max_channel_chat_id,

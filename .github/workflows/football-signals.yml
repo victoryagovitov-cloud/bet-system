@@ -135,6 +135,7 @@ jobs:
           mkdir -p football-signals/data
           git add -f football-signals/data/signals.db || true
           git add -f football-signals/data/calibration_latest.json || true
+          git add -f football-signals/data/phrase_rotation.json || true
           if git diff --staged --quiet; then
             echo "No stats changes to commit"
           else
