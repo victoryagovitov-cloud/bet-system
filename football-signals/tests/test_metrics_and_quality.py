@@ -334,10 +334,53 @@ def test_format_value_has_disclaimer_footer():
         signal_kind="value",
     )
     text = format_signal(s, 30000)
-    assert text.startswith("СТАВКА")
+    assert text.startswith("СТАВКА (хорошая цена)")
     assert "Запас над ценой букмекера: 5.0%" in text
+    assert "ценный" not in text.lower()
+    assert "value" not in text.lower()
+    assert "купон" not in text.lower()
     assert "⚠️" in text
     assert "────────" in text
+
+
+def test_digest_uses_plain_channel_terms():
+    empty = format_daily_digest(
+        target_date=date(2026, 8, 18),
+        matches_with_odds=10,
+        matches_in_whitelist=3,
+        signals=[],
+    )
+    assert "купон" not in empty.lower()
+    assert "ценный" not in empty.lower()
+    assert "Новых ставок сейчас нет" in empty
+    assert "слабую ставку" in empty
+
+    s = SignalCandidate(
+        match_id=2,
+        home_team="Home",
+        away_team="Away",
+        league_id=1,
+        league_name="L",
+        kickoff="2026-08-20",
+        outcome="dc_1x",
+        outcome_label="1X",
+        model_prob=0.84,
+        best_bookmaker="marathon",
+        best_odds=1.27,
+        edge=0.05,
+        stake_fraction=0.0333,
+        signal_kind="value",
+    )
+    filled = format_daily_digest(
+        target_date=date(2026, 8, 18),
+        matches_with_odds=10,
+        matches_in_whitelist=3,
+        signals=[s],
+    )
+    assert "хорошая цена — 1" in filled
+    assert "[хорошая цена]" in filled
+    assert "ценный" not in filled.lower()
+    assert "купон" not in filled.lower()
 
 
 def test_failover_uses_backup_on_primary_fail():

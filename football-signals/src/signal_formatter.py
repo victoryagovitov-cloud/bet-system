@@ -34,7 +34,7 @@ def _body_value(signal: SignalCandidate, bankroll_amount: float) -> str:
     bk = BOOKMAKER_NAMES.get(signal.best_bookmaker, signal.best_bookmaker)
     stake_rub = signal.stake_fraction * bankroll_amount
     return (
-        f"СТАВКА (ценный коэффициент)\n"
+        f"СТАВКА (хорошая цена)\n"
         f"────────\n"
         f"Матч: {signal.home_team} — {signal.away_team}\n"
         f"Лига: {signal.league_name}\n"
@@ -127,7 +127,7 @@ def format_daily_digest(
                 "Новых ставок сейчас нет.",
                 "Мы публикуем только то, что проходит строгие правила. "
                 "Сегодня подходящего варианта не нашлось — так бывает, и это нормально.",
-                "Лучше помолчать, чем дать слабый купон «для галочки».",
+                "Лучше помолчать, чем дать слабую ставку «для галочки».",
                 "Следующая проверка снова пройдёт по календарю.",
                 "",
                 pick_education(),
@@ -142,11 +142,11 @@ def format_daily_digest(
             [
                 "",
                 f"Сейчас опубликовали сигналов: {len(signals)} "
-                f"(ценный коэффициент — {n_value}, верняк — {n_lock}).",
+                f"(хорошая цена — {n_value}, верняк — {n_lock}).",
             ]
         )
         for s in signals:
-            tag = "верняк" if (s.signal_kind or "") == "lock" else "ценный кэф"
+            tag = "верняк" if (s.signal_kind or "") == "lock" else "хорошая цена"
             bk = BOOKMAKER_NAMES.get(s.best_bookmaker, s.best_bookmaker)
             parts.append(
                 f"— [{tag}] {s.home_team} — {s.away_team}: {s.outcome_label} "
