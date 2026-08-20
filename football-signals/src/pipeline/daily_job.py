@@ -461,14 +461,12 @@ def run_daily_pipeline(
                     signals.append(published)
 
     digest_date = dates[0] if len(dates) == 1 else dates[-1]
-    pending = len(repo.unsettled())
     digest = signal_formatter.format_daily_digest(
         target_date=digest_date,
         matches_with_odds=matches_with_odds,
         matches_in_whitelist=matches_in_whitelist,
         signals=signals,
         date_window=dates if len(dates) > 1 else None,
-        pending_settlement=pending,
         rotator=rotator,
     )
     digest_ref = max_publisher.publish_signal(
@@ -479,10 +477,9 @@ def run_daily_pipeline(
         match_id=None,
     )
     logger.info(
-        "daily digest published ref={} signals={} pending_settlement={}",
+        "daily digest published ref={} signals={}",
         digest_ref,
         len(signals),
-        pending,
     )
     logger.info("pipeline done signals={}", len(signals))
     return signals
