@@ -1,7 +1,7 @@
 {
-  "settled_now": 3,
+  "settled_now": 0,
   "voids_now": 0,
-  "pending": 19,
+  "pending": 20,
   "n": 30,
   "hit_rate": 0.7666666666666667,
   "mean_model_prob": 0.8445985400787274,
